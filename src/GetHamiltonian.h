@@ -89,10 +89,10 @@ int GetHamiltonian(const unsigned int N, const std::vector<std::complex<T>> &Sdi
 
 
   result = -mu * kron3(ssz, st0, st0)
-            - t * (kron3(ssz, st1, st0) + kron3(ssz, st0, st1))
-            - tt * kron3(ssz, st1, st1)
-            - ttt * (kron3(ssz, stt1, st0) + kron3(ssz, st0, stt1))
-            - tttt * kron3(ssz, stt1, stt1);
+           - t * (kron3(ssz, st1, st0) + kron3(ssz, st0, st1))
+           - tt * kron3(ssz, st1, st1)
+           - ttt * (kron3(ssz, stt1, st0) + kron3(ssz, st0, stt1))
+           - tttt * kron3(ssz, stt1, stt1);
 
   SparseMatrix<cT> dform = 0.5 * kroneckerProduct(st1, st0) - kroneckerProduct(st0, st1);
 

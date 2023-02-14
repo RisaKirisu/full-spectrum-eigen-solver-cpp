@@ -1,4 +1,7 @@
 #include <cuComplex.h>
+#include <algorithm>
+#include "CudaHelper.h"
+#include <cstdio>
 
 namespace GPU {
 
@@ -31,15 +34,15 @@ __global__ void addInPlaceKernel<cuDoubleComplex>(cuDoubleComplex *__restrict__ 
 }
 
 template <typename Scalar, typename RealType>
-__global__ void divideByRealKernel(Scalar * __restrict__ v, const RealType * __restrict__ s, Scalar * __restrict__ res, int size) {
+__global__ void divideByRealKernel(const Scalar * __restrict__ v, const RealType * __restrict__ s, Scalar * __restrict__ res, int size) {
   RealType scalar = *s;
   for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < size; i += blockDim.x * gridDim.x) {
-    v[i] /= scalar;
+    res[i] = v[i] / scalar;
   }
 }
 
 template <>
-__global__ void divideByRealKernel<cuComplex, float>(cuComplex * __restrict__ v, const float * __restrict__ s, cuComplex * __restrict__ res, int size) {
+__global__ void divideByRealKernel<cuComplex, float>(const cuComplex * __restrict__ v, const float * __restrict__ s, cuComplex * __restrict__ res, int size) {
   float scalar = *s;
   for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < size; i += blockDim.x * gridDim.x) {
     res[i].x = v[i].x / scalar;
@@ -48,7 +51,7 @@ __global__ void divideByRealKernel<cuComplex, float>(cuComplex * __restrict__ v,
 }
 
 template <>
-__global__ void divideByRealKernel<cuDoubleComplex, double>(cuDoubleComplex * __restrict__ v, const double * __restrict__ s, cuDoubleComplex * __restrict__ res, int size) {
+__global__ void divideByRealKernel<cuDoubleComplex, double>(const cuDoubleComplex * __restrict__ v, const double * __restrict__ s, cuDoubleComplex * __restrict__ res, int size) {
   double scalar = *s;
   for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < size; i += blockDim.x * gridDim.x) {
     res[i].x = v[i].x / scalar;
@@ -93,28 +96,88 @@ __global__ void eigshNormalizeKernel<cuDoubleComplex>(cuDoubleComplex * __restri
   }
 }
 
-template <typename Scalar>
-void _permute(Scalar *v, const int *perm, void *buffer, int size)
+void _permute(float *v, const int *perm, void *buffer, int size)
 {
+  using Scalar = float;
   permuteKernel<Scalar><<<std::min((int) std::ceil(size / 512.0f), 80), 512>>>(v, perm, (Scalar *) buffer, size);
   CHECK_CUDA( cudaMemcpy(v, buffer, size * sizeof(Scalar), cudaMemcpyDeviceToDevice) );
 }
 
-template <typename Scalar>
-void addInPlace(Scalar * __restrict__ lhs, Scalar * __restrict__ rhs) {
-  addInPlaceKernel<Scalar><<<1, 1>>>(lhs, rhs);
-}
-
-template <typename Scalar>
-inline void eigshNormalize(Scalar * __restrict__ col, Scalar * __restrict__ v, int n,
-                           const Scalar * __restrict__ u ,const Scalar * __restrict__ beta)
+void _permute(double *v, const int *perm, void *buffer, int size)
 {
-  eigshNormalizeKernel<Scalar><<<std::min((int) std::ceil(n / 512.0f), 80), 512>>>(col, v, n, u, beta);
+  using Scalar = double;
+  permuteKernel<Scalar><<<std::min((int) std::ceil(size / 512.0f), 80), 512>>>(v, perm, (Scalar *) buffer, size);
+  CHECK_CUDA( cudaMemcpy(v, buffer, size * sizeof(Scalar), cudaMemcpyDeviceToDevice) );
 }
 
-template <typename Scalar, typename RealType>
-void _divideByReal(Scalar * __restrict__ v, const RealType * __restrict__ s, Scalar * __restrict__ res, int size) {
-  divideByRealKernel<Scalar, RealType><<<std::min((int) std::ceil(n / 512.0f), 80), 512>>>(v, s, res, size);
+void _permute(cuComplex *v, const int *perm, void *buffer, int size)
+{
+  using Scalar = cuComplex;
+  permuteKernel<Scalar><<<std::min((int) std::ceil(size / 512.0f), 80), 512>>>(v, perm, (Scalar *) buffer, size);
+  CHECK_CUDA( cudaMemcpy(v, buffer, size * sizeof(Scalar), cudaMemcpyDeviceToDevice) );
+}
+
+void _permute(cuDoubleComplex *v, const int *perm, void *buffer, int size)
+{
+  using Scalar = cuDoubleComplex;
+  permuteKernel<Scalar><<<std::min((int) std::ceil(size / 512.0f), 80), 512>>>(v, perm, (Scalar *) buffer, size);
+  CHECK_CUDA( cudaMemcpy(v, buffer, size * sizeof(Scalar), cudaMemcpyDeviceToDevice) );
+}
+
+void addInPlace(float * __restrict__ lhs, float * __restrict__ rhs) {
+  addInPlaceKernel<float><<<1, 1>>>(lhs, rhs);
+}
+
+void addInPlace(double * __restrict__ lhs, double * __restrict__ rhs) {
+  addInPlaceKernel<double><<<1, 1>>>(lhs, rhs);
+}
+
+void addInPlace(cuComplex * __restrict__ lhs, cuComplex * __restrict__ rhs) {
+  addInPlaceKernel<cuComplex><<<1, 1>>>(lhs, rhs);
+}
+
+void addInPlace(cuDoubleComplex * __restrict__ lhs, cuDoubleComplex * __restrict__ rhs) {
+  addInPlaceKernel<cuDoubleComplex><<<1, 1>>>(lhs, rhs);
+}
+
+void eigshNormalize(float * __restrict__ col, float * __restrict__ v, int n,
+                    const float * __restrict__ u ,const float * __restrict__ beta)
+{
+  eigshNormalizeKernel<float><<<std::min((int) std::ceil(n / 512.0f), 80), 512>>>(col, v, n, u, beta);
+}
+
+void eigshNormalize(double * __restrict__ col, double * __restrict__ v, int n,
+                    const double * __restrict__ u ,const double * __restrict__ beta)
+{
+  eigshNormalizeKernel<double><<<std::min((int) std::ceil(n / 512.0f), 80), 512>>>(col, v, n, u, beta);
+}
+
+void eigshNormalize(cuComplex * __restrict__ col, cuComplex * __restrict__ v, int n,
+                    const cuComplex * __restrict__ u ,const cuComplex * __restrict__ beta)
+{
+  eigshNormalizeKernel<cuComplex><<<std::min((int) std::ceil(n / 512.0f), 80), 512>>>(col, v, n, u, beta);
+}
+
+void eigshNormalize(cuDoubleComplex * __restrict__ col, cuDoubleComplex * __restrict__ v, int n,
+                    const cuDoubleComplex * __restrict__ u ,const cuDoubleComplex * __restrict__ beta)
+{
+  eigshNormalizeKernel<cuDoubleComplex><<<std::min((int) std::ceil(n / 512.0f), 80), 512>>>(col, v, n, u, beta);
+}
+
+void _divideByReal(const float * __restrict__ v, const float * __restrict__ s, float * __restrict__ res, int size) {
+  divideByRealKernel<float, float><<<std::min((int) std::ceil(size / 512.0f), 80), 512>>>(v, s, res, size);
+}
+
+void _divideByReal(const double * __restrict__ v, const double * __restrict__ s, double * __restrict__ res, int size) {
+  divideByRealKernel<double, double><<<std::min((int) std::ceil(size / 512.0f), 80), 512>>>(v, s, res, size);
+}
+
+void _divideByReal(const cuComplex * __restrict__ v, const float * __restrict__ s, cuComplex * __restrict__ res, int size) {
+  divideByRealKernel<cuComplex, float><<<std::min((int) std::ceil(size / 512.0f), 80), 512>>>(v, s, res, size);
+}
+
+void _divideByReal(const cuDoubleComplex * __restrict__ v, const double * __restrict__ s, cuDoubleComplex * __restrict__ res, int size) {
+  divideByRealKernel<cuDoubleComplex, double><<<std::min((int) std::ceil(size / 512.0f), 80), 512>>>(v, s, res, size);
 }
 
 } // Namespace GPU
