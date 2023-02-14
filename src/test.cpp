@@ -33,22 +33,70 @@ int main() {
   using Eigen::SparseLU;
   using std::cout;
   using std::endl;
-  
-  std::srand((unsigned int) time(0));
-  const int N = 5;
 
-  Matrix<float, N, N> A = Matrix<float, N, N>::Random();
-  SparseMatrix<float> spA = A.sparseView();
-  SparseLU<SparseMatrix<float>, Eigen::COLAMDOrdering<int>> lu;
-  lu.analyzePattern(spA);
-  lu.factorize(spA);
-  SparseMatrix<float> L, U;
-  lu.getCscLU(L, U);
+  Matrix<float, 5, 5> a = Matrix<float, 5, 5>::Random();
+  cout << a << endl << endl;
+  Matrix<std::complex<float>, 5, 5> b = a;
+  cout << b << endl;
 
-  cout << Matrix<float, N, N>(L) << endl;
-  cout << L.nonZeros() << endl;
+  // int n = 100;
+  // Matrix<float, -1, -1> t(n, n);
+  // t.setZero();
+  // Vector<float, -1> d0 = Vector<float, -1>::Random(n);
+  // Vector<float, -1> d1 = Vector<float, -1>::Random(n - 1);
+  // t.diagonal() = d0;
+  // t.diagonal(-1) = d1;
 
-  cout << SparseMatrix<float, Eigen::RowMajor>(L).isCompressed() << endl;
+  // {
+  //   Timer timer("eigh");
+  //   Eigen::SelfAdjointEigenSolver<Matrix<float, -1, -1>> eigh(t);
+  //   Vector<float, -1> E = eigh.eigenvalues();
+  //   Matrix<float, -1, -1> V = eigh.eigenvectors();
+  //   cout << E[0] << endl;
+  //   t.diagonal(1) = d1;
+  //   Eigen::SelfAdjointEigenSolver<Matrix<float, -1, -1>> eigh2(t);
+  //   cout << eigh2.eigenvalues()[0] << endl;
+  // }
+
+
+  // SparseMatrix<float> spA = A.sparseView();
+  // SparseLU<SparseMatrix<float>, Eigen::COLAMDOrdering<int>> lu;
+  // lu.analyzePattern(spA);
+  // lu.factorize(spA);
+  // SparseMatrix<float> L, U;
+  // Matrix<float, N, N> recA;
+
+
+  // L = lu.matrixL().toSparse();
+  // U = lu.matrixU().toSparse();
+  // cout << "L nnz: " << L.nonZeros() << endl;
+  // cout << "U nnz: " << U.nonZeros() << endl;
+  // recA = L * U;
+  // recA = recA * lu.colsPermutation();
+  // recA = lu.rowsPermutation().transpose() * recA;
+  // // cout << recA << endl;
+
+  // if (!A.isApprox(recA)) {
+  //   cout << "FAIL" << endl;
+  // } else {
+  //   cout << "PASS" << endl;
+  // }
+
+  // lu.getCscLU(L, U);
+  // cout << "L nnz: " << L.nonZeros() << endl;
+  // cout << "U nnz: " << U.nonZeros() << endl;
+  // recA = L * U;
+  // recA = recA * lu.colsPermutation();
+  // recA = lu.rowsPermutation().transpose() * recA;
+  // // cout << recA << endl;
+
+  // if (!A.isApprox(recA)) {
+  //   cout << "FAIL" << endl;
+  // } else {
+  //   cout << "PASS" << endl;
+  // }
+
+
 
   // for (int i = 0; i < 2; ++i) {
   //   Matrix<float, N, N> A = Matrix<float, N, N>::Random();

@@ -11,6 +11,10 @@
 #include <stdio.h>
 #include <cstdlib>
 #include <vector>
+#include <numeric>
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 #include "Timer.h"
 #include "GetHamiltonian.h"

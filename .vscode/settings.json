@@ -1,4 +1,7 @@
 {
+    "[typescript]": {
+        "editor.tabSize": 2
+    },
     "files.associations": {
         "array": "cpp",
         "atomic": "cpp",
@@ -88,6 +91,31 @@
         "optional": "cpp",
         "__nullptr": "cpp",
         "regex": "cpp",
-        "__node_handle": "cpp"
+        "__node_handle": "cpp",
+        "typeindex": "cpp",
+        "locale": "cpp",
+        "svd": "cpp",
+        "*.inc": "cpp",
+        "threadpool": "cpp",
+        "matrixfunctions": "cpp",
+        "nonlinearoptimization": "cpp",
+        "sparseextra": "cpp",
+        "cassert": "cpp",
+        "cerrno": "cpp",
+        "cfloat": "cpp",
+        "climits": "cpp",
+        "__config": "cpp",
+        "__functional_base": "cpp",
+        "__hash_table": "cpp",
+        "__tree": "cpp",
+        "__locale": "cpp",
+        "filesystem": "cpp",
+        "ios": "cpp",
+        "__split_buffer": "cpp",
+        "queue": "cpp",
+        "stack": "cpp",
+        "eigenvalues": "cpp",
+        "polynomials": "cpp",
+        "geometry": "cpp"
     }
 }

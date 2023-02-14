@@ -177,7 +177,7 @@ class SparseLU : public SparseSolverBase<SparseLU<MatrixType_,OrderingType_> >, 
     void analyzePattern (const MatrixType& matrix);
     void factorize (const MatrixType& matrix);
     void simplicialfactorize(const MatrixType& matrix);
-    void getCscLU(SparseMatrix<Scalar, ColMajor, StorageIndex> &Lcsc, SparseMatrix<Scalar, ColMajor, StorageIndex> &Ucsc) const;
+    void getCsrLU(SparseMatrix<Scalar, RowMajor, StorageIndex> &Lcsc, SparseMatrix<Scalar, RowMajor, StorageIndex> &Ucsc) const;
     
     /**
       * Compute the symbolic and numeric factorization of the input sparse matrix.
@@ -811,7 +811,7 @@ void SparseLU<MatrixType, OrderingType>::factorize(const MatrixType& matrix)
  * @param Ucsc SparseMatrix where resulting U matrix will be stored into
 */
 template <typename MatrixType, typename OrderingType>
-void SparseLU<MatrixType, OrderingType>::getCscLU(SparseMatrix<SparseLU::Scalar, ColMajor, StorageIndex> &Lcsc, SparseMatrix<Scalar, ColMajor, StorageIndex> &Ucsc) const
+void SparseLU<MatrixType, OrderingType>::getCsrLU(SparseMatrix<SparseLU::Scalar, RowMajor, StorageIndex> &Lcsr, SparseMatrix<Scalar, RowMajor, StorageIndex> &Ucsr) const
 {
   /*
     * Convert SC and NC format matrices L, U to CSC format.
@@ -822,11 +822,9 @@ void SparseLU<MatrixType, OrderingType>::getCscLU(SparseMatrix<SparseLU::Scalar,
     * This routine is adapted from SuperLU SciPy wrappers:
     * https://github.com/scipy/scipy/blob/v1.10.0/scipy/sparse/linalg/_dsolve/_superluobject.c
     */
-  
+  SparseMatrix<SparseLU::Scalar, ColMajor, StorageIndex> Lcsc, Ucsc;
   Lcsc.resize(rows(), cols());
   Ucsc.resize(rows(), cols());
-  Lcsc.makeCompressed();
-  Ucsc.makeCompressed();
   Lcsc.reserve(m_nnzL);
   Ucsc.reserve(m_nnzU);
 
@@ -906,6 +904,8 @@ void SparseLU<MatrixType, OrderingType>::getCscLU(SparseMatrix<SparseLU::Scalar,
       L_colptr[icol + 1] = L_nnz;
     }
   }
+  Lcsr = Lcsc;
+  Ucsr = Ucsc;
 }
 
 template<typename MappedSupernodalType>
