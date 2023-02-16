@@ -7,9 +7,12 @@
 #include <cusparse.h>
 #include <cublas_v2.h>
 #include <cuComplex.h>
+#include <cusolverDn.h>
+#include <nvToolsExt.h>
 
 #include "CudaHelper.h"
 #include "_cublas.h"
+#include "_cusparse.h"
 #include "UtilKernels.cuh"
 #include "DenseCuda.cuh"
 #include "SparseCuda.cuh"

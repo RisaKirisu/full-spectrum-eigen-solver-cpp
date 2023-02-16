@@ -20,10 +20,16 @@ class cusparseLinearOperator {
 template <typename Scalar>
 class cuparseCsrMatrix : public cusparseLinearOperator<Scalar> {
   public:
+    using CudaType = typename real_type<Scalar>::CudaType;
     cuparseCsrMatrix() {}
 
     // Construct cusparseCsrMatrix from a generic Eigen sparse matrix. The input must be compressed.
-    cuparseCsrMatrix(const Eigen::SparseMatrix<Scalar> &matrix) {
+    cuparseCsrMatrix(const Eigen::SparseMatrix<Scalar, Eigen::ColMajor> &matrix) {
+      setMatrix(matrix);
+    }
+
+    // Construct cusparseCsrMatrix from a generic Eigen sparse matrix. The input must be compressed.
+    cuparseCsrMatrix(const Eigen::SparseMatrix<Scalar, Eigen::RowMajor> &matrix) {
       setMatrix(matrix);
     }
 
@@ -102,8 +108,8 @@ class cuparseCsrMatrix : public cusparseLinearOperator<Scalar> {
 
       // Create dense vector descriptor
       cusparseDnVecDescr_t descrRhs, descrOut;
-      CHECK_CUSPARSE( cusparseCreateDnVec(&descrOut, out.size(), out.data(), dtype<Scalar>()) );
-      CHECK_CUSPARSE( cusparseCreateDnVec(&descrRhs, rhs.size(), rhs.data(), dtype<Scalar>()) );
+      CHECK_CUSPARSE( cusparseCreateDnVec(&descrOut, out.size(), out.data(), CUDA_DTYPE<Scalar>) );
+      CHECK_CUSPARSE( cusparseCreateDnVec(&descrRhs, rhs.size(), rhs.data(), CUDA_DTYPE<Scalar>) );
 
       // Set pointer mode
       cusparsePointerMode_t pointerMode;
@@ -116,7 +122,7 @@ class cuparseCsrMatrix : public cusparseLinearOperator<Scalar> {
         CHECK_CUSPARSE( cusparseSpMV_bufferSize(
                                 handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                                 &alpha, m_descr, descrRhs, &beta, descrOut,
-                                dtype<Scalar>(), CUSPARSE_SPMV_CSR_ALG1,
+                                CUDA_DTYPE<Scalar>, CUSPARSE_SPMV_CSR_ALG1,
                                 &bufSz) );
         CHECK_CUDA( cudaMalloc((void **) &m_workBuf, (size_t) (1.2 * bufSz)) );
       }
@@ -124,7 +130,7 @@ class cuparseCsrMatrix : public cusparseLinearOperator<Scalar> {
       // Calculate
       CHECK_CUSPARSE( cusparseSpMV(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                                    &alpha, m_descr, descrRhs, &beta, descrOut,
-                                   dtype<Scalar>(), CUSPARSE_SPMV_CSR_ALG1,
+                                   CUDA_DTYPE<Scalar>, CUSPARSE_SPMV_CSR_ALG1,
                                    m_workBuf) );
 
       // Restore pointer mode
@@ -153,17 +159,17 @@ class cuparseCsrMatrix : public cusparseLinearOperator<Scalar> {
     /* Pointer to row pointer array.
      *Note: the pointer points to an address in GPU memory.
     */ 
-    void *rowPosPtr() const { return m_dCsrRowPtr; }
+    int *rowPosPtr() const { return m_dCsrRowPtr; }
 
     /* Pointer to column indices array.
      *Note: the pointer points to an address in GPU memory.
     */ 
-    void *colIdxPtr() const { return m_dCsrColIdx; }
+    int *colIdxPtr() const { return m_dCsrColIdx; }
 
     /* Pointer to non-zero element array.
      *Note: the pointer points to an address in GPU memory.
     */ 
-    void *valuePtr() const { return m_dCsrVal; }
+    CudaType *valuePtr() const { return m_dCsrVal; }
 
     // The cusparse sparse matrix descriptor of this matrix.
     cusparseSpMatDescr_t descriptor() const { return m_descr; }
@@ -171,9 +177,9 @@ class cuparseCsrMatrix : public cusparseLinearOperator<Scalar> {
   private:
     cudaStream_t m_stream = NULL;
     cusparseSpMatDescr_t m_descr = NULL;
-    void *m_dCsrRowPtr = nullptr;
-    void *m_dCsrColIdx = nullptr;
-    void *m_dCsrVal = nullptr;
+    int *m_dCsrRowPtr = nullptr;
+    int *m_dCsrColIdx = nullptr;
+    CudaType *m_dCsrVal = nullptr;
     void *m_workBuf = nullptr;
     int m_nnz = 0;
     int m_rows = 0;
@@ -222,7 +228,7 @@ class cuparseCsrMatrix : public cusparseLinearOperator<Scalar> {
                                         m_dCsrRowPtr, m_dCsrColIdx, m_dCsrVal,
                                         CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
                                         CUSPARSE_INDEX_BASE_ZERO,
-                                        dtype<Scalar>()) );
+                                        CUDA_DTYPE<Scalar>) );
     }
 
 };
@@ -230,15 +236,17 @@ class cuparseCsrMatrix : public cusparseLinearOperator<Scalar> {
 template <typename Scalar>
 class cusparseLU : public cusparseLinearOperator<Scalar> {
   public:
+    using CudaType = typename real_type<Scalar>::CudaType;
+
     // Construct cusparseLU from solved Eigen SparseLU objects.
     cusparseLU(Eigen::SparseLU<Eigen::SparseMatrix<Scalar>> &lu)
-      : m_perm_r(lu.rowsPermutation().indices()), m_perm_cInv(lu.colsPermutation().inverse().eval().indices())
+      : m_perm_r(lu.rowsPermutation().indices()), m_perm_cInv(lu.colsPermutation().inverse().eval().indices())//, m_lu(lu)
     {
       Eigen::SparseMatrix<Scalar, Eigen::RowMajor> lcsr, ucsr;
       lu.getCsrLU(lcsr, ucsr);
       m_L = lcsr;
       m_U = ucsr;
-      _setMatAttr();
+      _setMatDescr();
     }
 
     // Construct cusparseLU from Eigen SparseMatrix
@@ -246,7 +254,7 @@ class cusparseLU : public cusparseLinearOperator<Scalar> {
                Eigen::PermutationMatrix<Eigen::Dynamic> perm_r, Eigen::PermutationMatrix<Eigen::Dynamic> perm_c) 
       : m_L(L), m_U(U), m_perm_r(perm_r.indices()), m_perm_cInv(perm_c.inverse().eval().indices())
     {
-      _setMatAttr();
+      _setMatDescr();
     }
 
     cusparseLU(const void *Ldata, const void *LcolIdx, const void *LrowPtr,
@@ -256,7 +264,7 @@ class cusparseLU : public cusparseLinearOperator<Scalar> {
       : m_L(Ldata, LrowPtr, LcolIdx, nnzL, rows, rows), m_U(Udata, UrowPtr, UcolIdx, nnzU, rows, rows),
         m_perm_r(perm_r, rows, false), m_perm_cInv(perm_cInv, rows, false)
     {
-      _setMatAttr();
+      _setMatDescr();
     }
 
     cusparseLU(const cusparseLU<Scalar> &rhs) {
@@ -276,78 +284,78 @@ class cusparseLU : public cusparseLinearOperator<Scalar> {
 
     // Let Pr * A * Pc.T = L * U. This solves a system of linear equation: A * out = alpha * rhs
     void solve(cusparseHandle_t handle, const cuVector<Scalar> &rhs, const Scalar alpha, cuVector<Scalar> &out) {
-      if (m_L.descriptor() == NULL) {
-        fprintf(stderr, "Solve: matrix is not initialized.\n");
-        exit(1);
-      }
       if (cols() != rhs.size()) {
         fprintf(stderr, "Solve: shape mismatch. Solving system (%d, %d) with rhs (%d)\n", rows(), cols(), rhs.size());
         exit(1);
       }
 
-      // Create dense vector descriptor
-      cusparseDnVecDescr_t descrOut;
-      CHECK_CUSPARSE( cusparseCreateDnVec(&descrOut, out.size(), out.data(), dtype<Scalar>()) );
+      out = rhs;
+      // cuVector<Scalar> tmp(out.size());
 
-      // Set pointer mode
-      cusparsePointerMode_t pointerMode;
-      CHECK_CUSPARSE( cusparseGetPointerMode(handle, &pointerMode) );
       CHECK_CUSPARSE( cusparseSetPointerMode(handle, CUSPARSE_POINTER_MODE_HOST) );
-
-      // Create SpSV descriptor if not already created
-      if (m_spsvDescrL == NULL) {
-        CHECK_CUSPARSE( cusparseSpSV_createDescr(&m_spsvDescrL) );
-        CHECK_CUSPARSE( cusparseSpSV_createDescr(&m_spsvDescrU) );
-      }
-
+      
       // Allocate work buffer and perform analysis if not already allocated
       if (m_dataBuf == nullptr) {
         size_t bufSzL = 0;
         size_t bufSzU = 0;
-        CHECK_CUSPARSE( cusparseSpSV_bufferSize(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                                &alpha, m_L.descriptor(), descrOut, descrOut,
-                                                dtype<Scalar>(), CUSPARSE_SPSV_ALG_DEFAULT,
-                                                m_spsvDescrL, &bufSzL) );
-        CHECK_CUSPARSE( cusparseSpSV_bufferSize(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                                &alpha, m_U.descriptor(), descrOut, descrOut,
-                                                dtype<Scalar>(), CUSPARSE_SPSV_ALG_DEFAULT,
-                                                m_spsvDescrU, &bufSzU) );
-        CHECK_CUDA( cudaMalloc((void **) m_dataBuf, std::max((size_t) rows(), std::max(bufSzL, bufSzU))) );
+        
+        // Determine buffer size and allocate buffer
+        CHECK_CUSPARSE( cusparseCsrsm2_bufferSize(handle, trans, trans,
+                                                  rows(), 1, nnzL(), (CudaType *) &alpha, m_descrL,
+                                                  m_L.valuePtr(), m_L.rowPosPtr(), m_L.colIdxPtr(),
+                                                  rhs.data(), rhs.size(), m_infoL, policy, &bufSzL) )
+        CHECK_CUSPARSE( cusparseCsrsm2_bufferSize(handle, trans, trans,
+                                                  rows(), 1, nnzU(), (CudaType *) &alpha, m_descrU,
+                                                  m_U.valuePtr(), m_U.rowPosPtr(), m_U.colIdxPtr(),
+                                                  rhs.data(), rhs.size(), m_infoU, policy, &bufSzU) )
+        CHECK_CUDA( cudaMalloc((void **) &m_dataBuf, std::max((size_t) rows(), std::max(bufSzL, bufSzU))) );
 
-        CHECK_CUSPARSE( cusparseSpSV_analysis(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                              &alpha, m_L.descriptor(), descrOut, descrOut,
-                                              dtype<Scalar>(), CUSPARSE_SPSV_ALG_DEFAULT,
-                                              m_spsvDescrL, m_dataBuf) );
-        CHECK_CUSPARSE( cusparseSpSV_analysis(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                              &alpha, m_U.descriptor(), descrOut, descrOut,
-                                              dtype<Scalar>(), CUSPARSE_SPSV_ALG_DEFAULT,
-                                              m_spsvDescrU, m_dataBuf) );
+        // Perform analysis
+        CHECK_CUSPARSE( cusparseCsrsm2_analysis(handle, trans, trans,
+                                                rows(), 1, nnzL(), (CudaType *) &alpha, m_descrL,
+                                                m_L.valuePtr(), m_L.rowPosPtr(), m_L.colIdxPtr(),
+                                                rhs.data(), rhs.size(), m_infoL, policy, m_dataBuf) );
+        CHECK_CUSPARSE( cusparseCsrsm2_analysis(handle, trans, trans,
+                                                rows(), 1, nnzU(), (CudaType *) &alpha, m_descrU,
+                                                m_U.valuePtr(), m_U.rowPosPtr(), m_U.colIdxPtr(),
+                                                rhs.data(), rhs.size(), m_infoU, policy, m_dataBuf) );
       }
       
       // Apply row permutation
-      out = rhs;
+      // Eigen::Vector<Scalar, -1> ref = rhs.get();  // cpu
+      
+      // printf("Copy: %d\n", ref.isApprox(out.get()));  // cpu
       out.permute(m_perm_r, m_dataBuf);
+      // ref = m_lu.rowsPermutation() * ref;         // cpu
+      // printf("Row permutation: %d\n", ref.isApprox(out.get())); // cpu
 
       // Solve L
-      CHECK_CUSPARSE( cusparseSpSV_solve(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                         &alpha, m_L.descriptor(),descrOut, descrOut,
-                                         dtype<Scalar>(), CUSPARSE_SPSV_ALG_DEFAULT,
-                                         m_spsvDescrL) );
+      // printf("Solve\n");
+      CHECK_CUSPARSE( cusparseCsrsm2_solve(handle, trans, trans,
+                                           rows(), 1, nnzL(), (CudaType *) &alpha, m_descrL,
+                                           m_L.valuePtr(), m_L.rowPosPtr(), m_L.colIdxPtr(),
+                                           out.data(), out.size(), m_infoL, policy, m_dataBuf) );
+      // m_lu.matrixL().solveInPlace(ref);  // cpu
+      // printf("Solve L: %d\n", ref.isApprox(tmp.get()));  // cpu
+
       // Solve U
       Scalar one(1);
-      CHECK_CUSPARSE( cusparseSpSV_solve(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                         &one, m_U.descriptor(), descrOut, descrOut,
-                                         dtype<Scalar>(), CUSPARSE_SPSV_ALG_DEFAULT,
-                                         m_spsvDescrU) );
+      CHECK_CUSPARSE( cusparseCsrsm2_solve(handle, trans, trans,
+                                           rows(), 1, nnzU(), (CudaType *) &alpha, m_descrU,
+                                           m_U.valuePtr(), m_U.rowPosPtr(), m_U.colIdxPtr(),
+                                           out.data(), out.size(), m_infoU, policy, m_dataBuf) );
+      // m_lu.matrixU().solveInPlace(ref);  // cpu
+      // printf("Solve U: %d\n", ref.isApprox(out.get()));  // cpu
 
       // Apply inverse of column permutation
       out.permute(m_perm_cInv, m_dataBuf);
+      // ref = m_lu.colsPermutation().inverse() * ref;  // cpu
+      // printf("Col permutation: %d\n", ref.isApprox(out.get()));  // cpu
     }
 
     // Let Pr * A * Pc.T = L * U. This calculate: out = A^-1 * rhs
     void matvec(cusparseHandle_t handle, const cuVector<Scalar> &rhs, cuVector<Scalar> &out) {
-      Scalar alpha(1);
-      solve(handle, rhs, alpha, out);
+      solve(handle, rhs, m_alpha, out);
     }
 
     // Number of rows
@@ -368,8 +376,14 @@ class cusparseLU : public cusparseLinearOperator<Scalar> {
   private:
     cuparseCsrMatrix<Scalar> m_L, m_U;
     cuVector<int> m_perm_r, m_perm_cInv;
-    cusparseSpSVDescr_t m_spsvDescrL = NULL;
-    cusparseSpSVDescr_t m_spsvDescrU = NULL;
+    const cusparseSolvePolicy_t policy = CUSPARSE_SOLVE_POLICY_USE_LEVEL;
+    const cusparseOperation_t trans = CUSPARSE_OPERATION_NON_TRANSPOSE;
+    cusparseMatDescr_t m_descrL = NULL;
+    cusparseMatDescr_t m_descrU = NULL;
+    csrsm2Info_t m_infoL = NULL;
+    csrsm2Info_t m_infoU = NULL;
+    const Scalar m_alpha = 1;
+    // Eigen::SparseLU<Eigen::SparseMatrix<Scalar>, Eigen::COLAMDOrdering<int>> &m_lu;
 
     void *m_dataBuf = nullptr;
 
@@ -379,11 +393,15 @@ class cusparseLU : public cusparseLinearOperator<Scalar> {
         m_dataBuf = nullptr;
       }
 
-      if (m_spsvDescrL) {
-        CHECK_CUSPARSE( cusparseSpSV_destroyDescr(m_spsvDescrL) );
-        CHECK_CUSPARSE( cusparseSpSV_destroyDescr(m_spsvDescrU) );
-        m_spsvDescrL = NULL;
-        m_spsvDescrU = NULL;
+      if (m_descrU) {
+        CHECK_CUSPARSE( cusparseDestroyCsrsm2Info(m_infoL) );
+        CHECK_CUSPARSE( cusparseDestroyCsrsm2Info(m_infoU) );
+        CHECK_CUSPARSE( cusparseDestroyMatDescr(m_descrL) );
+        CHECK_CUSPARSE( cusparseDestroyMatDescr(m_descrU) );
+        m_infoL = NULL;
+        m_infoU = NULL;
+        m_descrL = NULL;
+        m_descrU = NULL;
       }
     }
 
@@ -395,21 +413,23 @@ class cusparseLU : public cusparseLinearOperator<Scalar> {
       m_perm_cInv = rhs.m_perm_cInv;
     }
 
-    void _setMatAttr() {
+    void _setMatDescr() {
+      // Create matrix descriptors
+      CHECK_CUSPARSE(cusparseCreateMatDescr(&m_descrU));
+      CHECK_CUSPARSE(cusparseCreateMatDescr(&m_descrL));
+      // Specify Index Base
+      CHECK_CUSPARSE(cusparseSetMatIndexBase(m_descrL, CUSPARSE_INDEX_BASE_ZERO));
+      CHECK_CUSPARSE(cusparseSetMatIndexBase(m_descrU, CUSPARSE_INDEX_BASE_ZERO));
       // Specify Lower|Upper fill mode.
-      cusparseFillMode_t fillmode = CUSPARSE_FILL_MODE_LOWER;
-      CHECK_CUSPARSE( cusparseSpMatSetAttribute(m_L.descriptor(), CUSPARSE_SPMAT_FILL_MODE,
-                                                &fillmode, sizeof(fillmode)) );
-      fillmode = CUSPARSE_FILL_MODE_UPPER;
-      CHECK_CUSPARSE( cusparseSpMatSetAttribute(m_U.descriptor(), CUSPARSE_SPMAT_FILL_MODE,
-                                                &fillmode, sizeof(fillmode)) );
-
+      CHECK_CUSPARSE(cusparseSetMatFillMode(m_descrL, CUSPARSE_FILL_MODE_LOWER));
+      CHECK_CUSPARSE(cusparseSetMatFillMode(m_descrU, CUSPARSE_FILL_MODE_UPPER));
       // Specify Unit|Non-Unit diagonal type.
-      cusparseDiagType_t diagtype = CUSPARSE_DIAG_TYPE_NON_UNIT;
-      CHECK_CUSPARSE( cusparseSpMatSetAttribute(m_L.descriptor(), CUSPARSE_SPMAT_DIAG_TYPE,
-                                                &diagtype, sizeof(diagtype)) );
-      CHECK_CUSPARSE( cusparseSpMatSetAttribute(m_U.descriptor(), CUSPARSE_SPMAT_DIAG_TYPE,
-                                                &diagtype, sizeof(diagtype)) );
+      CHECK_CUSPARSE(cusparseSetMatDiagType(m_descrL, CUSPARSE_DIAG_TYPE_UNIT));
+      CHECK_CUSPARSE(cusparseSetMatDiagType(m_descrU, CUSPARSE_DIAG_TYPE_NON_UNIT));
+
+      // Create Info
+      CHECK_CUSPARSE(cusparseCreateCsrsm2Info(&m_infoL));
+      CHECK_CUSPARSE(cusparseCreateCsrsm2Info(&m_infoU));
     }
 
 };

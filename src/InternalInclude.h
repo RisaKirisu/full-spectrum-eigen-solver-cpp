@@ -15,7 +15,9 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <sstream>
 
+#include "Utils.h"
 #include "Timer.h"
 #include "GetHamiltonian.h"
 

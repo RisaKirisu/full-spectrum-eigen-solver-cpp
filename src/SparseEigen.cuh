@@ -77,13 +77,11 @@ class Eigsh {
         tol = std::numeric_limits<RealType>::epsilon();
       }
 
-      printf("ncv = %d\n", ncv);
-      std::cout << "tol = " << tol << std::endl;
-
-
       cudaDeviceProp deviceProp;
       cudaGetDeviceProperties(&deviceProp, 0);
       int ccMajor = deviceProp.major;
+
+      srand((unsigned int) time(0));
 
       // Initiate data structures for lanczos iteration
       // Main diagonal
@@ -100,7 +98,7 @@ class Eigsh {
       beta.setZero();
 
       // Set initial lanczos vector
-      cuVector<Scalar> u(Eigen::Vector<Scalar, Eigen::Dynamic>::Random(n));    
+      cuVector<Scalar> u(Vector(Vector::Random(n)).cwiseAbs());    
       u.norm(m_cublasHandle, (RealType *) beta[0]);                     // beta[0] is just used as a temp buffer
       u.divideByReal((RealType *) beta[0], V.col(0));   // V.col(0) = u / beta[0]
 
@@ -111,8 +109,10 @@ class Eigsh {
 
       size_t iter = ncv;
       // Solve for eigen-pairs of the tridiagonal matrix
+      nvtxRangePush("copy ab");
       alphaHost = alpha.get();
       betaHost = beta.get();
+      nvtxRangePop();
       cuMatrix<Scalar> s(ncv, k);
       cuVector<Scalar> w(k);
       _eigsh_solve_ritz(alphaHost, betaHost, beta_kHost, k, which, w, s, true);
@@ -137,25 +137,44 @@ class Eigsh {
       // std::cout << beta_kHost.transpose() << std::endl;
 
       RealType res = beta_k.norm(m_cublasHandle);
+      printf ("\n Residual: %e\n", res);            
 
-      cuMatrix<Scalar> VVt(n, n);
-      Matrix VVtH(n, n);
-      Vector I(n);
-      I.setOnes();
+      // cuMatrix<Scalar> VVt(ncv, ncv);
+      // cuMatrix<Scalar> xtx(k, k);
+      // Matrix VVtH(ncv, ncv);
+      // Matrix xtxH(k, k);
+      // Vector I(n);
+      // Vector Incv(ncv);c
+      // I.setOnes();
+      // Incv.setOnes();
 
       while (res > tol && iter < maxiter) {
         // Track orthogonality
         CHECK_CUBLAS( cublasSetPointerMode(m_cublasHandle, CUBLAS_POINTER_MODE_DEVICE) );
-        CHECK_CUBLAS( _gemm(m_cublasHandle, CUBLAS_OP_N, CUBLAS_OP_HERMITAN,
-                            n, n, ncv,
-                            one.data(), V.data(), n,
-                            V.data(), n,
-                            zero.data(), VVt.data(), n,
-                            ccMajor) );
+        // CHECK_CUBLAS( _gemm(m_cublasHandle, CUBLAS_OP_HERMITAN, CUBLAS_OP_N,
+        //                     ncv, ncv, n,
+        //                     one.data(), V.data(), n,
+        //                     V.data(), n,
+        //                     zero.data(), VVt.data(), ncv,
+        //                     ccMajor) );
 
-        VVtH = VVt.get();
-        VVtH.diagonal() -= I;
-        std::cout << "ortho: " << VVtH.norm() << std::endl;
+        // CHECK_CUBLAS( _gemm(m_cublasHandle, CUBLAS_OP_HERMITAN, CUBLAS_OP_N,
+        //                     k, k, n,
+        //                     one.data(), x.data(), n,
+        //                     x.data(), n,
+        //                     zero.data(), xtx.data(), k,
+        //                     ccMajor) );
+
+        // VVtH = VVt.get();
+        // VVtH.diagonal().array() -= Scalar(1);
+        // xtxH = xtx.get();
+        // xtxH.diagonal().array() -= Scalar(1);
+
+        // printf("\033[0;31m");                                            // CPU
+        // printf("V Orthogonality: %e\n", VVtH.norm());                      // CPU
+        // printf("x Orthogonality: %e\n", xtxH.norm());
+        // printf("\033[0m");                                               // CPU
+
 
         // Setup for thick-restart
         CHECK_CUDA( cudaMemset(beta.data(), 0, k * sizeof(Scalar)) ); // beta[:k] = 0;
@@ -192,9 +211,29 @@ class Eigsh {
                             one.data(), vv.data(), 1) );
         u.axpy(m_cublasHandle, vv.data(), mone.data());
 
+        // CHECK_CUBLAS( _gemv(m_cublasHandle, CUBLAS_OP_HERMITAN,
+        //                     n, k + 1,
+        //                     one.data(),
+        //                     V.data(), n,
+        //                     u.data(), 1,
+        //                     zero.data(), uu.data(), 1) );
+        // CHECK_CUBLAS( _gemv(m_cublasHandle, CUBLAS_OP_N,
+        //                     n, k + 1,
+        //                     mone.data(),
+        //                     V.data(), n,
+        //                     uu.data(), 1,
+        //                     one.data(), u.data(), 1) );
+        // addInPlace(alpha[k], uu[k]);
+        
+        // beta[k] = ||u||
+        u.norm(m_cublasHandle, (RealType *) beta[k]);
+        // V[:, k + 1] = u / ||u||
+        u.divideByReal((RealType *) beta[k], V.col(k + 1));
+
+        
         // Lanczos iteration
         _lanczos(V, u, alpha, beta, k + 1, ncv);
-
+      
         iter += ncv - k;
         // Solve for eigen-pairs of the tridiagonal matrix
         alphaHost = alpha.get();
@@ -215,6 +254,7 @@ class Eigsh {
         CHECK_CUBLAS( _scal(m_cublasHandle, k, (RealType *) beta[beta.size() - 1], beta_k.data(), 1) );
         beta_kHost = beta_k.get();
         res = beta_k.norm(m_cublasHandle);
+        printf ("Residual: %e\n", res);            
       }
       m_eigenvalues = w.get().real();   // Hermitian matrix always has real eigenvalues.
       m_eigenvectors = x.get();
@@ -233,7 +273,9 @@ class Eigsh {
   private:
     cublasHandle_t m_cublasHandle;
     cusparseHandle_t m_cusparseHandle;
+    cusolverDnHandle_t m_cusolverHandle;
 
+    void *m_buffer = NULL;
     cusparseLinearOperator<Scalar> &A;
 
     // Neat constants in device memory
@@ -255,15 +297,14 @@ class Eigsh {
                   cuVector<Scalar> &alpha, cuVector<Scalar> &beta,
                   int start, int end) 
     {
+      nvtxRangePush("_lanczos");
       int n = V.rows();
       v = V.col(start);
       for (int i = start; i < end; ++i) {
         A.matvec(m_cusparseHandle, v, u);             // u = A * v
-
-        // Call dotc: alpha[i] = v dot u
         v.dotc(m_cublasHandle, u.data(), alpha[i]);
 
-        // Orthogonalize: u = u - alpha[i] * v - beta[i - 1] * V[i - 1]
+        // Orthogonalize: u = u - alpha[i] * v - beta[i - 1] * V[:, i - 1]
         vv.setZero();
         if (i > 0) {
           vv.axpy(m_cublasHandle, V.col(i - 1), beta[i - 1]);
@@ -272,7 +313,6 @@ class Eigsh {
         u.axpy(m_cublasHandle, vv.data(), mone.data());
 
         // Reorthogonalize: u -= V * (V.H * u)
-        CHECK_CUBLAS( cublasSetPointerMode(m_cublasHandle, CUBLAS_POINTER_MODE_DEVICE) );
         CHECK_CUBLAS( _gemv(m_cublasHandle, CUBLAS_OP_HERMITAN,
                             n, i + 1,
                             one.data(),
@@ -285,6 +325,7 @@ class Eigsh {
                             V.data(), n,
                             uu.data(), 1,
                             one.data(), u.data(), 1) );
+
         addInPlace(alpha[i], uu[i]);
 
         // Call nrm2: beta[i] = ||u||
@@ -295,17 +336,21 @@ class Eigsh {
           break;
         }
 
-        // Normalize
+        // Normalize  V.col(i + 1) = u / ||u||, v = u / ||u||
         eigshNormalize(V.col(i + 1), v.data(), n, u.data(), beta[i]);
       }
+      nvtxRangePop();
     }
 
     void _eigsh_solve_ritz(Vector &alpha, Vector &beta, Vector &beta_k, int k, EigshResultKind which,
                            cuVector<Scalar> &w, cuMatrix<Scalar> &s, bool firstRun = false) {
+      // std::cout << "_ritz" <<std::endl;
+      nvtxRangePush("_eigsh_solve_ritz");
+
       Matrix t(alpha.rows(), alpha.rows());
       t.setZero();
 
-      // t is Hermitian. Only the lower triangular part is referenced by eigen solver 
+      // t is Hermitian. Only the lower triangular part is referenced by eigen solver
       t.diagonal() = alpha;
       t.diagonal(-1) = beta.head(beta.rows() - 1);
       if (!firstRun) {
@@ -314,10 +359,6 @@ class Eigsh {
 
       Eigen::SelfAdjointEigenSolver<Matrix> eigh(t);
 
-      if (firstRun) {
-        // std::cout << t << std::endl << std::endl;
-        // std::cout << beta.transpose() << std::endl << std::endl;          
-      }
 
       // Pick up k ritz-values and ritz-vectors
       // Results returned by the solver are already sorted in increasing order.
@@ -338,6 +379,9 @@ class Eigsh {
         w = eigh.eigenvalues()(idx).head(k);
         s = eigh.eigenvectors()(Eigen::placeholders::all, idx).leftCols(k);
       }
+      nvtxRangePop();
     }
+
+
 };
 }

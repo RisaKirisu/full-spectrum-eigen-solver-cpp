@@ -1,30 +1,6 @@
-#include "InternalInclude.h"
+#include "InternalIncludeCuda.h"
+// #include "InternalInclude.h"
 
-// int main() {
-//   using Eigen::Matrix;
-//   using Eigen::Vector;
-//   using Eigen::SparseMatrix;
-//   using Eigen::SparseLU;
-//   using std::cout;
-//   using std::endl;
-//   int N = 500;
-  
-//   Matrix<std::complex<float>, -1, -1> A(N, N);
-//   for (int i = 0; i < N; ++i) {
-//     for (int j = 0; j < N; ++j) {
-//       A(i, j) = std::complex<float>(i % 7 + j * 2 % 5 * 1.5, i * 2 + j % 6 * 0.4);
-//     }
-//   }
-  
-//   Matrix<std::complex<float>, -1, -1> H = A + A.adjoint();
-//   Eigen::SelfAdjointEigenSolver<Matrix<std::complex<float>, -1, -1>> eigsh;
-//   {
-//     Timer timer("Eigen Solve");
-//     for (int i = 0; i < 100; ++i)
-//       eigsh.compute(H);
-//   }
-//   // cout << eigsh.eigenvalues() << endl;
-// }
 
 int main() {
   using Eigen::Matrix;
@@ -32,94 +8,118 @@ int main() {
   using Eigen::SparseMatrix;
   using Eigen::SparseLU;
   using std::cout;
+  using std::cin;
   using std::endl;
+  using std::complex;
+  int N = 150;
 
-  Matrix<float, 5, 5> a = Matrix<float, 5, 5>::Random();
-  cout << a << endl << endl;
-  Matrix<std::complex<float>, 5, 5> b = a;
-  cout << b << endl;
+  std::cout << "Max number of threads allowed: " << Eigen::nbThreads() << "." << std::endl;
+  using precision = float;
+  using Scalar = complex<precision>;
 
-  // int n = 100;
-  // Matrix<float, -1, -1> t(n, n);
-  // t.setZero();
-  // Vector<float, -1> d0 = Vector<float, -1>::Random(n);
-  // Vector<float, -1> d1 = Vector<float, -1>::Random(n - 1);
-  // t.diagonal() = d0;
-  // t.diagonal(-1) = d1;
+  SparseMatrix<std::complex<precision>, Eigen::ColMajor> H;
+  std::vector<std::complex<precision>> S;
+
+  for (int i = 0; i < N * N; ++i) {
+    S.emplace_back(1, 0);
+  }
+  
+  GetHamiltonian(N, S, 0.06, H);
+
+  std::cout << H.rows() << std::endl;
+  std::cout << H.cols() << std::endl;
+  std::cout << H.nonZeros() << std::endl;
+
+  // cout << Matrix<std::complex<float>, -1, -1>(H) << endl << endl;
+  // Vector<std::complex<float>, -1> d(H.rows());
+  // d.setConstant(std::complex<float>(0.5));
+  // H.diagonal() -= d;
+  // cout << Matrix<std::complex<float>, -1, -1>(H) << endl;
+
+  SparseLU<SparseMatrix<std::complex<float>>, Eigen::COLAMDOrdering<int>> lu;
+  {
+    Timer timer("LU decomp");
+    lu.isSymmetric(true);
+    lu.analyzePattern(H);
+    lu.factorize(H);
+  }
+  // Vector<float, -1> v1 {{1, 0, 1}};
+  // Vector<float, -1> v2 {{0, 1, 0}};
+  // Vector<float, -1> v3 {{1, 0, -1}};
+  // Matrix<float, -1, -1> H =  4 * v1 * v1.transpose() + 8 * v2 * v2.transpose() + 3 * v3 * v3.transpose();
+  // SparseMatrix<float, Eigen::RowMajor> Hs = H.sparseView();
+
+  // Vector<Scalar, -1> y = Vector<Scalar, -1>::Random(lu.rows());
+  // Vector<Scalar, -1> x;
+  // {
+  //   Timer timer("Eigen");
+  //   x = lu.solve(y);
+  // }
+
+  GPU::cusparseLU<Scalar> luG(lu);
+  // GPU::cuVector<Scalar> yG(y);
+  // GPU::cuVector<Scalar> xG(lu.rows());
+  // cusparseHandle_t handle;
+  // cusparseCreate(&handle);
+  // {
+  //   Timer timer("cuSparse first time");
+  //   luG.matvec(handle, yG, xG);
+  // }
 
   // {
-  //   Timer timer("eigh");
-  //   Eigen::SelfAdjointEigenSolver<Matrix<float, -1, -1>> eigh(t);
-  //   Vector<float, -1> E = eigh.eigenvalues();
-  //   Matrix<float, -1, -1> V = eigh.eigenvectors();
-  //   cout << E[0] << endl;
-  //   t.diagonal(1) = d1;
-  //   Eigen::SelfAdjointEigenSolver<Matrix<float, -1, -1>> eigh2(t);
-  //   cout << eigh2.eigenvalues()[0] << endl;
+  //   Timer timer("cuSparse");
+  //   luG.matvec(handle, yG, xG);
   // }
+  // Vector<Scalar, -1> xx = xG.get();
 
+  // SparseMatrix<Scalar, Eigen::RowMajor> L, U;
+  // lu.getCsrLU(L, U);
+  // Vector<Scalar, -1> xxx = y;
+  // Vector<Scalar, -1> tmp = y;
+  // tmp = lu.rowsPermutation() * xxx;
+  // L.triangularView<Eigen::Lower>().solveInPlace(tmp);
+  // U.triangularView<Eigen::Upper>().solveInPlace(tmp);
+  // xxx = lu.colsPermutation().inverse() * tmp;
 
-  // SparseMatrix<float> spA = A.sparseView();
-  // SparseLU<SparseMatrix<float>, Eigen::COLAMDOrdering<int>> lu;
-  // lu.analyzePattern(spA);
-  // lu.factorize(spA);
-  // SparseMatrix<float> L, U;
-  // Matrix<float, N, N> recA;
-
-
-  // L = lu.matrixL().toSparse();
-  // U = lu.matrixU().toSparse();
-  // cout << "L nnz: " << L.nonZeros() << endl;
-  // cout << "U nnz: " << U.nonZeros() << endl;
-  // recA = L * U;
-  // recA = recA * lu.colsPermutation();
-  // recA = lu.rowsPermutation().transpose() * recA;
-  // // cout << recA << endl;
-
-  // if (!A.isApprox(recA)) {
-  //   cout << "FAIL" << endl;
-  // } else {
-  //   cout << "PASS" << endl;
-  // }
-
-  // lu.getCscLU(L, U);
-  // cout << "L nnz: " << L.nonZeros() << endl;
-  // cout << "U nnz: " << U.nonZeros() << endl;
-  // recA = L * U;
-  // recA = recA * lu.colsPermutation();
-  // recA = lu.rowsPermutation().transpose() * recA;
-  // // cout << recA << endl;
-
-  // if (!A.isApprox(recA)) {
-  //   cout << "FAIL" << endl;
-  // } else {
-  //   cout << "PASS" << endl;
-  // }
-
-
-
-  // for (int i = 0; i < 2; ++i) {
-  //   Matrix<float, N, N> A = Matrix<float, N, N>::Random();
-  //   SparseMatrix<float> spA = A.sparseView();
-  //   SparseLU<SparseMatrix<float>, Eigen::COLAMDOrdering<int>> lu;
-  //   lu.analyzePattern(spA);
-  //   lu.factorize(spA);
-  //   SparseMatrix<float> L, U;
-  //   lu.getCscLU(L, U);
-
-  //   Matrix<float, N, N> recA(L * U);
-  //   recA = recA * lu.colsPermutation();
-  //   recA = lu.rowsPermutation().transpose() * recA;
-
-  //   if (!A.isApprox(recA)) {
-  //     cout << "FAIL" << endl;
-  //     exit(-1);
-  //   }
-  // }
+  // Vector<Scalar, -1> ry = H * x;
+  // Vector<Scalar, -1> ryy = H * xx;
+  // Vector<Scalar, -1> ryyy = H * xxx;
   
-  // cout << "PASS" << endl;
-  // cout << L << endl;
-  // cout << U << endl;
+  // printf("%d\n", y.isApprox(ry));
+  // printf("%e\n", (y - ry).norm());
+  // printf("%d\n", y.isApprox(ryy));
+  // printf("%e\n", (y - ryy).norm());
+  // printf("%d\n", y.isApprox(ryyy));
+  // printf("%e\n", (y - ryyy).norm());
+  // GPU::cuparseCsrMatrix<Scalar> Hdevice(H);
+  GPU::Eigsh<Scalar> eigsh(luG);
+  Vector<precision, -1> E;
+  Matrix<Scalar, -1, -1> V;
+  {
+    printf("Start Solving. \n");
+    eigsh.solve(300, GPU::LM, 0, 0, 2e-5);
+    E = eigsh.eigenvalues();
+    V = eigsh.eigenvectors();
+  }
+  {
+    Timer timer("Eigen Solve");
+    printf("Start Solving. \n");
+    eigsh.solve(300, GPU::LM, 0, 0, 2e-5);
+    E = eigsh.eigenvalues();
+    V = eigsh.eigenvectors();
+  }
+  Matrix<Scalar, -1, -1> VtV = V.adjoint() * V;
+  VtV.diagonal().array() -= 1;
+
+  // cout << "Result:" << endl;
+  // cout << E.transpose().array().inverse() << endl;
+  cout << VtV.norm() << endl;
+
+  // std::vector<unsigned long> shape{(unsigned long) L.nonZeros()};
+  // std::vector<unsigned long> shapeCol{(unsigned long) L.cols() + 1};
+  // npy::SaveArrayAsNumpy("rowidx.npy", false, shape.size(), shape.data(), L.innerIndexPtr());
+  // npy::SaveArrayAsNumpy("data.npy", false, shape.size(), shape.data(), L.valuePtr());
+  // npy::SaveArrayAsNumpy("colptr.npy", false, shapeCol.size(), shapeCol.data(), L.outerIndexPtr());
 
   return 0;
 }

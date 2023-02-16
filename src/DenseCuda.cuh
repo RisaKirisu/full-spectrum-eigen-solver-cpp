@@ -58,7 +58,7 @@ class cuVector {
 
     // Make a deep copy of rhs
     cuVector<Scalar>& operator=(const cuVector<Scalar> &rhs) {
-      if (this == &rhs) {
+      if (this != &rhs) {
         _copy(rhs);
       }
       return *this;
@@ -136,7 +136,7 @@ class cuVector {
     }
     
     // Get a copy of the vector on host memory.
-    Eigen::Vector<Scalar, Eigen::Dynamic> get() {
+    Eigen::Vector<Scalar, Eigen::Dynamic> get() const {
       CHECK_CUDA( cudaMemcpy(m_hValues, data(), size() * sizeof(Scalar), cudaMemcpyDeviceToHost) );
       return Eigen::Map<Eigen::Vector<Scalar, Eigen::Dynamic>>(m_hValues, size());
     }

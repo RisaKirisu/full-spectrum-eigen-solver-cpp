@@ -1,46 +1,39 @@
 namespace GPU {
-
-
-
 template <typename T>
-inline cudaDataType dtype();
+constexpr cudaDataType CUDA_DTYPE = CUDA_R_32F;
 
 template <>
-inline cudaDataType dtype<float>() {
-  return CUDA_R_32F;
-}
+constexpr cudaDataType CUDA_DTYPE<float> = CUDA_R_32F;
 
 template <>
-inline cudaDataType dtype<double>() {
-  return CUDA_R_64F;
-}
+constexpr cudaDataType CUDA_DTYPE<double> = CUDA_R_64F;
 
 template <>
-inline cudaDataType dtype<std::complex<float>>() {
-  return CUDA_C_32F;
-}
+constexpr cudaDataType CUDA_DTYPE<std::complex<float>> = CUDA_C_32F;
 
 template <>
-inline cudaDataType dtype<std::complex<double>>() {
-  return CUDA_C_64F;
-}
+constexpr cudaDataType CUDA_DTYPE<std::complex<double>> = CUDA_C_64F;
+
 
 template <typename T>
 struct real_type {
   using RealType = T;
   using CudaType = T;
+  using DP = double;
 };
 
 template <>
 struct real_type<std::complex<float>> {
   using RealType = float;
   using CudaType = cuComplex;
+  using DP = std::complex<double>;
 };
 
 template <>
 struct real_type<std::complex<double>> {
   using RealType = double;
   using CudaType = cuDoubleComplex;
+  using DP = std::complex<double>;
 };
 
 inline cublasStatus_t _gemv(cublasHandle_t handle, cublasOperation_t trans,

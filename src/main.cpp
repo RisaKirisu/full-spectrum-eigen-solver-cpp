@@ -1,69 +1,59 @@
 #include "InternalIncludeCuda.h"
 // #include "InternalInclude.h"
 
+#ifdef DOUBLE
+typedef std::complex<double> Scalar;
+typedef double RealType;
+#else
+typedef std::complex<float> Scalar;
+typedef float RealType;
+#endif
 
-int main() {
+
+int main(int argc, char *argv[]) {
   using Eigen::Matrix;
   using Eigen::Vector;
   using Eigen::SparseMatrix;
   using Eigen::SparseLU;
+  using std::string;
   using std::cout;
   using std::cin;
   using std::endl;
   using std::complex;
-  int N = 60;
+  
+  int N;
+  string fnS_r;
+  string fnS_i;
+  string fnInterval;
+  double xtol;
 
-  std::cout << "Max number of threads allowed: " << Eigen::nbThreads() << "." << std::endl;
-  using precision = double;
-
-  SparseMatrix<std::complex<precision>, Eigen::ColMajor> H;
-  std::vector<std::complex<precision>> S;
-
-  for (int i = 0; i < N * N; ++i) {
-    S.emplace_back(1, 0);
+  if (argc != 6) {
+    printUsage();
   }
-  
-  GetHamiltonian(N, S, 0.06, H);
+  N = std::stoi(argv[1]);
+  fnS_r = string(argv[2]);
+  fnS_i = string(argv[3]);
+  fnInterval = string(argv[4]);
+  xtol = std::stod(argv[5]);
+  printf("Args: %d, %s, %s, %s, %f\n", N, fnS_r.c_str(), fnS_i.c_str(), fnInterval.c_str(), xtol);
 
-  std::cout << H.rows() << std::endl;
-  std::cout << H.cols() << std::endl;
-  std::cout << H.nonZeros() << std::endl;
+  std::vector<RealType> S_r, S_i;
+  std::vector<int> interval;
+  readArray<RealType>(fnS_r, N * N, S_r);
 
-  // cout << Matrix<std::complex<float>, -1, -1>(H) << endl << endl;
-  // Vector<std::complex<float>, -1> d(H.rows());
-  // d.setConstant(std::complex<float>(0.5));
-  // H.diagonal() -= d;
-  // cout << Matrix<std::complex<float>, -1, -1>(H) << endl;
+  // std::cout << "Max number of threads allowed: " << Eigen::nbThreads() << "." << std::endl;
+  // using precision = float;
+  // using Scalar = complex<precision>;
 
-  
-  // SparseLU<SparseMatrix<std::complex<float>>, Eigen::COLAMDOrdering<int>> lu;
-  // {
-  //   Timer timer("LU decomp");
-  //   lu.isSymmetric(true);
-  //   lu.analyzePattern(H);
-  //   lu.factorize(H);
+  // SparseMatrix<std::complex<precision>, Eigen::ColMajor> H;
+  // std::vector<std::complex<precision>> S;
+
+  // for (int i = 0; i < N * N; ++i) {
+  //   S.emplace_back(1, 0);
   // }
+  
+  // GetHamiltonian(N, S, 0.06, H);
 
-  // GPU::cusparseLU<complex<float>> luG(lu);
-  GPU::cuparseCsrMatrix<complex<precision>> Hdevice(H);
-  GPU::Eigsh<complex<precision>> eigsh(Hdevice);
-  Vector<precision, -1> E;
-  Matrix<complex<precision>, -1, -1> V;
-  {
-    Timer timer("Eigen Solve");
-    eigsh.solve(10, GPU::LM);
-    E = eigsh.eigenvalues();
-    V = eigsh.eigenvectors();
-  }
-
-  cout << "Result:" << endl;
-  cout << E.transpose() << endl;
-
-  // std::vector<unsigned long> shape{(unsigned long) L.nonZeros()};
-  // std::vector<unsigned long> shapeCol{(unsigned long) L.cols() + 1};
-  // npy::SaveArrayAsNumpy("rowidx.npy", false, shape.size(), shape.data(), L.innerIndexPtr());
-  // npy::SaveArrayAsNumpy("data.npy", false, shape.size(), shape.data(), L.valuePtr());
-  // npy::SaveArrayAsNumpy("colptr.npy", false, shapeCol.size(), shapeCol.data(), L.outerIndexPtr());
 
   return 0;
 }
