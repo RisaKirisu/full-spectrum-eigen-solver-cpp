@@ -5,7 +5,7 @@ namespace GPU {
 {                                                                               \
   if (!(condition)) {                                                           \
     fprintf(stderr, "(%s: %d) %s: ", __FILE__, __LINE__, __func__);             \
-    fprintf(stderr, error, __VA_ARGS__);                                        \
+    fprintf(stderr, (error), __VA_ARGS__);                                      \
     fprintf(stderr, "\n");                                                      \
     exit(1);                                                                    \
   }                                                                             \
@@ -137,7 +137,7 @@ class Eigsh {
       // std::cout << beta_kHost.transpose() << std::endl;
 
       RealType res = beta_k.norm(m_cublasHandle);
-      printf ("\n Residual: %e\n", res);            
+      // printf ("Residual: %e\n", res);            
 
       // cuMatrix<Scalar> VVt(ncv, ncv);
       // cuMatrix<Scalar> xtx(k, k);
@@ -254,12 +254,12 @@ class Eigsh {
         CHECK_CUBLAS( _scal(m_cublasHandle, k, (RealType *) beta[beta.size() - 1], beta_k.data(), 1) );
         beta_kHost = beta_k.get();
         res = beta_k.norm(m_cublasHandle);
-        printf ("Residual: %e\n", res);            
+        // printf ("Residual: %e\n", res);            
       }
       m_eigenvalues = w.get().real();   // Hermitian matrix always has real eigenvalues.
       m_eigenvectors = x.get();
       m_sortIdx = argsort(m_eigenvalues);
-      printf("Total iter: %lu\n", iter);
+      // printf("Total iter: %lu\n", iter);
     }
 
     VectorR eigenvalues() const {

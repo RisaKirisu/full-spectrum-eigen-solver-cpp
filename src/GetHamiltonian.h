@@ -45,7 +45,7 @@ inline void vstack(const Eigen::SparseMatrix<T> &l, const Eigen::SparseMatrix<T>
 
 
 template <typename T>
-int GetHamiltonian(const unsigned int N, const std::vector<std::complex<T>> &Sdiag, const double delta_o, Eigen::SparseMatrix<std::complex<T>> &result) {
+int GetHamiltonian(const int N, const std::vector<std::complex<T>> &Sdiag, const double delta_o, Eigen::SparseMatrix<std::complex<T>> &result) {
   typedef std::complex<T> cT;
   using Eigen::Matrix;
   using Eigen::SparseMatrix;
@@ -118,6 +118,9 @@ int GetHamiltonian(const unsigned int N, const std::vector<std::complex<T>> &Sdi
   cT zero(0);
   result.prune(zero);
   result.makeCompressed();
+
+  printCurrentTime();
+  printf(": Finished constructing hamiltonian of size %d * %d.\n", N, N);
 
   return 0;
 }

@@ -11,7 +11,7 @@ int main() {
   using std::cin;
   using std::endl;
   using std::complex;
-  int N = 150;
+  int N = 3;
 
   std::cout << "Max number of threads allowed: " << Eigen::nbThreads() << "." << std::endl;
   using precision = float;
@@ -30,19 +30,26 @@ int main() {
   std::cout << H.cols() << std::endl;
   std::cout << H.nonZeros() << std::endl;
 
+  Matrix<Scalar, -1, -1> Hd(H);
+  Matrix<precision, -1, -1> Hdf = Hd.cwiseAbs();
+
+  cout << Hdf << endl << endl;
+  cout << (Hdf.array() > 0.24) << endl;
+  cout << Hdf(Hdf.array() > 0.24) << endl;
+  
   // cout << Matrix<std::complex<float>, -1, -1>(H) << endl << endl;
   // Vector<std::complex<float>, -1> d(H.rows());
   // d.setConstant(std::complex<float>(0.5));
   // H.diagonal() -= d;
   // cout << Matrix<std::complex<float>, -1, -1>(H) << endl;
 
-  SparseLU<SparseMatrix<std::complex<float>>, Eigen::COLAMDOrdering<int>> lu;
-  {
-    Timer timer("LU decomp");
-    lu.isSymmetric(true);
-    lu.analyzePattern(H);
-    lu.factorize(H);
-  }
+  // SparseLU<SparseMatrix<std::complex<float>>, Eigen::COLAMDOrdering<int>> lu;
+  // {
+  //   Timer timer("LU decomp");
+  //   lu.isSymmetric(true);
+  //   lu.analyzePattern(H);
+  //   lu.factorize(H);
+  // }
   // Vector<float, -1> v1 {{1, 0, 1}};
   // Vector<float, -1> v2 {{0, 1, 0}};
   // Vector<float, -1> v3 {{1, 0, -1}};
@@ -56,7 +63,7 @@ int main() {
   //   x = lu.solve(y);
   // }
 
-  GPU::cusparseLU<Scalar> luG(lu);
+  // GPU::cusparseLU<Scalar> luG(lu);
   // GPU::cuVector<Scalar> yG(y);
   // GPU::cuVector<Scalar> xG(lu.rows());
   // cusparseHandle_t handle;
@@ -92,28 +99,28 @@ int main() {
   // printf("%d\n", y.isApprox(ryyy));
   // printf("%e\n", (y - ryyy).norm());
   // GPU::cuparseCsrMatrix<Scalar> Hdevice(H);
-  GPU::Eigsh<Scalar> eigsh(luG);
-  Vector<precision, -1> E;
-  Matrix<Scalar, -1, -1> V;
-  {
-    printf("Start Solving. \n");
-    eigsh.solve(300, GPU::LM, 0, 0, 2e-5);
-    E = eigsh.eigenvalues();
-    V = eigsh.eigenvectors();
-  }
-  {
-    Timer timer("Eigen Solve");
-    printf("Start Solving. \n");
-    eigsh.solve(300, GPU::LM, 0, 0, 2e-5);
-    E = eigsh.eigenvalues();
-    V = eigsh.eigenvectors();
-  }
-  Matrix<Scalar, -1, -1> VtV = V.adjoint() * V;
-  VtV.diagonal().array() -= 1;
+  // GPU::Eigsh<Scalar> eigsh(luG);
+  // Vector<precision, -1> E;
+  // Matrix<Scalar, -1, -1> V;
+  // {
+  //   printf("Start Solving. \n");
+  //   eigsh.solve(300, GPU::LM, 0, 0, 2e-5);
+  //   E = eigsh.eigenvalues();
+  //   V = eigsh.eigenvectors();
+  // }
+  // {
+  //   Timer timer("Eigen Solve");
+  //   printf("Start Solving. \n");
+  //   eigsh.solve(300, GPU::LM, 0, 0, 2e-5);
+  //   E = eigsh.eigenvalues();
+  //   V = eigsh.eigenvectors();
+  // }
+  // Matrix<Scalar, -1, -1> VtV = V.adjoint() * V;
+  // VtV.diagonal().array() -= 1;
 
-  // cout << "Result:" << endl;
-  // cout << E.transpose().array().inverse() << endl;
-  cout << VtV.norm() << endl;
+  // // cout << "Result:" << endl;
+  // // cout << E.transpose().array().inverse() << endl;
+  // cout << VtV.norm() << endl;
 
   // std::vector<unsigned long> shape{(unsigned long) L.nonZeros()};
   // std::vector<unsigned long> shapeCol{(unsigned long) L.cols() + 1};
