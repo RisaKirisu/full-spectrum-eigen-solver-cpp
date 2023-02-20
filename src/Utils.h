@@ -87,20 +87,20 @@ public:
     return m_queue.empty();
   }
 
-  bool isFull(bool blocking=true) const {
-    std::unique_lock<std::mutex> lock(m_mutex);
-    // printf("isFull\n");
-    if (m_max_capacity == -1 || m_queue.size() < m_max_capacity) {
-      return false;
-    }
-    // printf("??? %d, %d\n", m_max_capacity, m_queue.size());
-    if (blocking) {
-      m_cv_cap.wait(lock, [&]() { return m_max_capacity == -1 || m_queue.size() < m_max_capacity; });
-    }
-    return m_queue.size() < m_max_capacity;
-  }
+  // bool isFull(bool blocking=true) const {
+  //   std::unique_lock<std::mutex> lock(m_mutex);
+  //   // printf("isFull\n");
+  //   if (m_max_capacity == -1 || m_queue.size() < m_max_capacity) {
+  //     return false;
+  //   }
+  //   // printf("??? %d, %d\n", m_max_capacity, m_queue.size());
+  //   if (blocking) {
+  //     m_cv_cap.wait(lock, [&]() { return m_max_capacity == -1 || m_queue.size() < m_max_capacity; });
+  //   }
+  //   return m_queue.size() < m_max_capacity;
+  // }
 
-  int size() const { return m_queue.size(); }
+  // int size() const { return m_queue.size(); }
 
 private:
   std::queue<T> m_queue;

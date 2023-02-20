@@ -70,8 +70,6 @@ int main(int argc, char *argv[]) {
   // }
   GetHamiltonian(N, S, 0.06, H);
 
-  printCurrentTime();
-  printf(": Start solving. Using %d threads.\n", nthreads);
   Solve(H, interval, k, xtol, nthreads);
 
   return 0;
@@ -105,20 +103,23 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
   int maxAmountLU = availMem / luSize;
   printf("max: %d\n", maxAmountLU);
   
-  maxAmountLU = 8;
   ThreadSafeQueue<std::pair<RealType, RealType>> intervalQ;
-  ThreadSafeQueue<std::tuple<std::shared_ptr<SparseLU<SparseMatrix<Scalar>>>, RealType, RealType>> invQ(maxAmountLU);
+  ThreadSafeQueue<bool> stagQ(maxAmountLU);   // Emulate a semaphore. Prevent starting of new lu job after max is reached (prevent memory overflow). 
+  ThreadSafeQueue<std::tuple<std::shared_ptr<SparseLU<SparseMatrix<Scalar>>>, RealType, RealType>> invQ;
 
   for (int i = 1; i < intervals.size(); ++i) {
     // (shift, radius)
     intervalQ.push({(intervals[i] + intervals[i - 1]) / 2, (intervals[i] - intervals[i - 1]) / 2});
   }
 
+  printCurrentTime();
+  printf(": Start solving. Using %d threads.\n", nThreads);
+
   auto workerLU = [&]{
     std::pair<RealType, RealType> intvl;
-    while (intervalQ.pop(intvl, false) && !invQ.isFull()) {
+    while (intervalQ.pop(intvl, false)) {
+      stagQ.push(true);
       RealType sigma = intvl.first;
-      printf("Start sigma %f\n", sigma);
 
       SparseMatrix<Scalar> Tshift = T;
       Tshift.diagonal().array() -= sigma;
@@ -135,17 +136,25 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
   };
 
   auto workerEig = [&] {
+    bool s;
     size_t resSize = (T.rows() * sizeof(Scalar) + sizeof(RealType)) / 1024; // KB
-    int resBufSize = availMem * 1024 / 2 / resSize;   // Number of eigenpairs to keep in memory
+    int resBufSize = availMem * 1024 / 2 / resSize;   // Number of eigenpairs to keep in memory before saving to disk
+
+    // Result buffers
     Vector<RealType, -1> resE(1);
     Matrix<Scalar, -1, -1> resV(T.rows(), 1);
+    std::vector<int> found;
+    std::vector<RealType> sigmas;
+
     std::tuple<std::shared_ptr<SparseLU<SparseMatrix<Scalar>>>, RealType, RealType> work;
     
     for (int i = 0; i < intervals.size() - 1; ++i) {
       invQ.pop(work);
+      stagQ.pop(s, false);
 
       RealType sigma = std::get<1>(work);
       RealType radius = std::get<2>(work);
+      sigmas.push_back(sigma);
       // Calculate eigenvalues
       GPU::cusparseLU<Scalar> lu(*std::get<0>(work));
       GPU::Eigsh<Scalar> eigsh(lu);
@@ -176,6 +185,7 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
           }
         }
       }
+      found.push_back(idx.size());
 
       if (idx.size() > 0) {
         // Copy results to result buffer.
@@ -193,6 +203,12 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
         std::string fnV = "V_";
         fnV += std::to_string(i);
         fnV += ".npy";
+        std::string fnFound = "Found_";
+        fnV += std::to_string(i);
+        fnV += ".npy";
+        std::string fnSigma = "Sigma_";
+        fnV += std::to_string(i);
+        fnV += ".npy";
         
         unsigned long shapeE[1] = {resE.rows() - 1};
         npy::SaveArrayAsNumpy(fnE, false, 1, shapeE, resE.data() + 1);
@@ -200,8 +216,16 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
         unsigned long shapeV[2] = {resV.rows(), resV.cols() - 1};
         npy::SaveArrayAsNumpy(fnV, true, 2, shapeV, resV.data() + resV.rows());
 
+        unsigned long shapeF[1] = {found.size()};
+        npy::SaveArrayAsNumpy(fnFound, false, 1, shapeF, found.data());
+
+        unsigned long shapeS[1] = {sigmas.size()};
+        npy::SaveArrayAsNumpy(fnSigma, false, 1, shapeS, sigmas.data());
+
         resE.resize(1);
         resV.resize(T.rows(), 1);
+        found.clear();
+        sigmas.clear();
       }
 
       printCurrentTime();
@@ -218,10 +242,10 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
 
   // Lauch eigen worker thread
   printf("Lauch eigT\n");
-  // std::thread eigT(workerEig);
+  std::thread eigT(workerEig);
 
   // Wait for workers to finish.
-  // eigT.join();
+  eigT.join();
 
   for (int i = 0; i < nThreads - 1; ++i) {
     luTs[i].join();
