@@ -70,15 +70,24 @@ class cuVector {
       return *this;
     }
 
-    cuVector<Scalar>& operator=(const Eigen::Vector<RealType, Eigen::Dynamic> &rhs) {
+    cuVector<Scalar>& operator=(const Eigen::Vector<Scalar, Eigen::Dynamic> &rhs) {
       if (rhs.size() != size()) {
         resize(rhs.size());
       }
-      // Convert to complex if Scalar is complex
-      Eigen::Vector<Scalar, Eigen::Dynamic> tmp = rhs;
-      _setVector(tmp.data(), cudaMemcpyHostToDevice);
+      _setVector(rhs.data(), cudaMemcpyHostToDevice);
       return *this;
     }
+
+
+    // cuVector<Scalar>& operator=(const Eigen::Vector<RealType, Eigen::Dynamic> &rhs) {
+    //   if (rhs.size() != size()) {
+    //     resize(rhs.size());
+    //   }
+    //   // Convert to complex if Scalar is complex
+    //   Eigen::Vector<Scalar, Eigen::Dynamic> tmp = rhs.template cast<Scalar>();
+    //   _setVector(tmp.data(), cudaMemcpyHostToDevice);
+    //   return *this;
+    // }
 
     // Return a device pointer to indexed element
     CudaType *operator[](size_t index) {

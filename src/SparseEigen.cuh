@@ -109,10 +109,10 @@ class Eigsh {
 
       size_t iter = ncv;
       // Solve for eigen-pairs of the tridiagonal matrix
-      nvtxRangePush("copy ab");
+      // nvtxRangePush("copy ab");
       alphaHost = alpha.get();
       betaHost = beta.get();
-      nvtxRangePop();
+      // nvtxRangePop();
       cuMatrix<Scalar> s(ncv, k);
       cuVector<Scalar> w(k);
       _eigsh_solve_ritz(alphaHost, betaHost, beta_kHost, k, which, w, s, true);
@@ -297,7 +297,8 @@ class Eigsh {
                   cuVector<Scalar> &alpha, cuVector<Scalar> &beta,
                   int start, int end) 
     {
-      nvtxRangePush("_lanczos");
+      // nvtxRangePush("_lanczos");
+      // printf("_lanczos\n");
       int n = V.rows();
       v = V.col(start);
       for (int i = start; i < end; ++i) {
@@ -339,47 +340,52 @@ class Eigsh {
         // Normalize  V.col(i + 1) = u / ||u||, v = u / ||u||
         eigshNormalize(V.col(i + 1), v.data(), n, u.data(), beta[i]);
       }
-      nvtxRangePop();
+      // nvtxRangePop();
     }
 
     void _eigsh_solve_ritz(Vector &alpha, Vector &beta, Vector &beta_k, int k, EigshResultKind which,
                            cuVector<Scalar> &w, cuMatrix<Scalar> &s, bool firstRun = false) {
       // std::cout << "_ritz" <<std::endl;
-      nvtxRangePush("_eigsh_solve_ritz");
+      // nvtxRangePush("_eigsh_solve_ritz");
 
-      Matrix t(alpha.rows(), alpha.rows());
+      Eigen::Matrix<std::complex<double>, -1, -1> t(alpha.rows(), alpha.rows());
       t.setZero();
 
+      Eigen::Vector<std::complex<double>, -1> alphaD = alpha.template cast<std::complex<double>>();
+      Eigen::Vector<std::complex<double>, -1> betaD = beta.template cast<std::complex<double>>();
+      Eigen::Vector<std::complex<double>, -1> beta_kD = beta_k.template cast<std::complex<double>>();
+
       // t is Hermitian. Only the lower triangular part is referenced by eigen solver
-      t.diagonal() = alpha;
-      t.diagonal(-1) = beta.head(beta.rows() - 1);
+      t.diagonal() = alphaD;
+      t.diagonal(-1) = betaD.head(betaD.rows() - 1);
       if (!firstRun) {
-        t.block(k, 0, 1, k) = beta_k.transpose();
+        t.block(k, 0, 1, k) = beta_kD.transpose();
       }
 
-      Eigen::SelfAdjointEigenSolver<Matrix> eigh(t);
+      Eigen::SelfAdjointEigenSolver<Eigen::Matrix<std::complex<double>, -1, -1>> eigh(t);
+      Vector E = eigh.eigenvalues().cast<Scalar>();
+      Matrix V = eigh.eigenvectors().cast<Scalar>();
 
 
-      // Pick up k ritz-values and ritz-vectors
       // Results returned by the solver are already sorted in increasing order.
       if (which == LA) {
-        w = eigh.eigenvalues().tail(k);
-        s = eigh.eigenvectors().rightCols(k);
+        w = E.tail(k);
+        s = V.rightCols(k);
       } else if (which == SA) {
-        w = eigh.eigenvalues().head(k);
-        s = eigh.eigenvectors().leftCols(k);
+        w = E.head(k);
+        s = V.leftCols(k);
       } else if (which == LM) {
-        VectorR wAbs = eigh.eigenvalues().cwiseAbs();
+        VectorR wAbs = E.cwiseAbs();
         std::vector<size_t> idx = argsort(wAbs);
-        w = eigh.eigenvalues()(idx).tail(k);
-        s = eigh.eigenvectors()(Eigen::placeholders::all, idx).rightCols(k);
+        w = E(idx).tail(k);
+        s = V(Eigen::placeholders::all, idx).rightCols(k);
       } else if (which == SM) {
-        VectorR wAbs = eigh.eigenvalues().cwiseAbs();
+        VectorR wAbs = E.cwiseAbs();
         std::vector<size_t> idx = argsort(wAbs);
-        w = eigh.eigenvalues()(idx).head(k);
-        s = eigh.eigenvectors()(Eigen::placeholders::all, idx).leftCols(k);
+        w = E(idx).head(k);
+        s = V(Eigen::placeholders::all, idx).leftCols(k);
       }
-      nvtxRangePop();
+      // nvtxRangePop();
     }
 
 

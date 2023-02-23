@@ -31,11 +31,9 @@ int main() {
   std::cout << H.nonZeros() << std::endl;
 
   Matrix<Scalar, -1, -1> Hd(H);
-  Matrix<precision, -1, -1> Hdf = Hd.cwiseAbs();
+  Matrix<std::complex<double>, -1, -1> Hdf = Hd.cast<std::complex<double>>();
 
   cout << Hdf << endl << endl;
-  cout << (Hdf.array() > 0.24) << endl;
-  cout << Hdf(Hdf.array() > 0.24) << endl;
   
   // cout << Matrix<std::complex<float>, -1, -1>(H) << endl << endl;
   // Vector<std::complex<float>, -1> d(H.rows());

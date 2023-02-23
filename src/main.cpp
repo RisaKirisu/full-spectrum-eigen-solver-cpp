@@ -13,7 +13,8 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
            std::vector<RealType>                 &intervals,
            int                                            k,
            double                                       tol,
-           int                                     nThreads);
+           int                                     nThreads,
+           int                                     nDevice);
 
 int main(int argc, char *argv[]) {
   using Eigen::Matrix;
@@ -50,6 +51,13 @@ int main(int argc, char *argv[]) {
   nthreads = std::stoi(argv[8]);
   printf("Args: %d, %f, %s, %s, %s, %d, %f, %d\n", N, delta_o, fnS_r.c_str(), fnS_i.c_str(), fnInterval.c_str(), k, xtol, nthreads);
 
+  // Collect system info
+  int nDevice = 0;
+  CHECK_CUDA( cudaGetDeviceCount(&nDevice) );
+  nthreads = (nthreads == -1) ? std::thread::hardware_concurrency() : nthreads;
+  nthreads -= nDevice + 1;    // 1 thread for each GPU + 1 thread for handling results
+  nthreads = std::max((int) (nthreads / 2.5), 1);
+
   // Read S and intervals from provided files.
   int Nsq = N * N;
   std::vector<RealType> S_r, S_i, interval;
@@ -70,7 +78,7 @@ int main(int argc, char *argv[]) {
   // }
   GetHamiltonian(N, S, 0.06, H);
 
-  Solve(H, interval, k, xtol, nthreads);
+  Solve(H, interval, k, xtol, nthreads, nDevice);
 
   return 0;
 }
@@ -79,7 +87,8 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
            std::vector<RealType>                 &intervals,
            int                                            k,
            double                                       tol,
-           int                                     nThreads)
+           int                                     nThreads,
+           int                                     nDevice)
 {
   using Eigen::SparseMatrix;
   using Eigen::SparseLU;
@@ -106,6 +115,7 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
   ThreadSafeQueue<std::pair<RealType, RealType>> intervalQ;
   ThreadSafeQueue<bool> stagQ(maxAmountLU);   // Emulate a semaphore. Prevent starting of new lu job after max is reached (prevent memory overflow). 
   ThreadSafeQueue<std::tuple<std::shared_ptr<SparseLU<SparseMatrix<Scalar>>>, RealType, RealType>> invQ;
+  ThreadSafeQueue<std::tuple<std::shared_ptr<Matrix<Scalar, -1, -1>>, std::shared_ptr<Vector<RealType, -1>>, RealType, RealType>> resQ;
 
   for (int i = 1; i < intervals.size(); ++i) {
     // (shift, radius)
@@ -113,7 +123,7 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
   }
 
   printCurrentTime();
-  printf(": Start solving. Using %d threads.\n", nThreads);
+  printf(": Start solving. Lauching %d LU worker threads and %d GPU worker threads.\n", nThreads, nDevice);
 
   auto workerLU = [&]{
     std::pair<RealType, RealType> intvl;
@@ -121,9 +131,11 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
       stagQ.push(true);
       RealType sigma = intvl.first;
 
+      // Shift the matrix
       SparseMatrix<Scalar> Tshift = T;
       Tshift.diagonal().array() -= sigma;
 
+      // Invert the matrix (finding LU decomposition)
       std::shared_ptr<SparseLU<SparseMatrix<Scalar>>> luP = std::make_shared<SparseLU<SparseMatrix<Scalar>>>();
       luP->isSymmetric(true);
       luP->analyzePattern(Tshift);
@@ -135,17 +147,10 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
     }
   };
 
-  auto workerEig = [&] {
+  auto workerEig = [&] (int device) {
+    CHECK_CUDA( cudaSetDevice(device) );
+
     bool s;
-    size_t resSize = (T.rows() * sizeof(Scalar) + sizeof(RealType)) / 1024; // KB
-    int resBufSize = availMem * 1024 / 2 / resSize;   // Number of eigenpairs to keep in memory before saving to disk
-
-    // Result buffers
-    Vector<RealType, -1> resE(1);
-    Matrix<Scalar, -1, -1> resV(T.rows(), 1);
-    std::vector<int> found;
-    std::vector<RealType> sigmas;
-
     std::tuple<std::shared_ptr<SparseLU<SparseMatrix<Scalar>>>, RealType, RealType> work;
     
     for (int i = 0; i < intervals.size() - 1; ++i) {
@@ -154,45 +159,75 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
 
       RealType sigma = std::get<1>(work);
       RealType radius = std::get<2>(work);
-      sigmas.push_back(sigma);
       // Calculate eigenvalues
       GPU::cusparseLU<Scalar> lu(*std::get<0>(work));
       GPU::Eigsh<Scalar> eigsh(lu);
       eigsh.solve(k, GPU::LM, 0, 0, tol * std::numeric_limits<RealType>::epsilon());
-      Vector<RealType, -1> E = eigsh.eigenvalues();
-      Matrix<Scalar, -1, -1> V = eigsh.eigenvectors();
+      
+      std::shared_ptr<Vector<RealType, -1>> pE = std::make_shared<Vector<RealType, -1>>();
+      std::shared_ptr<Matrix<Scalar, -1, -1>> pV = std::make_shared<Matrix<Scalar, -1, -1>>();
+      *pE = eigsh.eigenvalues();
+      *pV = eigsh.eigenvectors();
+      resQ.push(std::make_tuple(pV, pE, sigma, radius));
+
+      printCurrentTime();
+      printf(": Finished solving at sigma = %f.\n", sigma);
+    }
+  };
+
+  auto workerRes = [&] {
+    std::tuple<std::shared_ptr<Matrix<Scalar, -1, -1>>, std::shared_ptr<Vector<RealType, -1>>, RealType, RealType> res;
+
+    size_t resSize = (T.rows() * sizeof(Scalar) + sizeof(RealType)) / 1024; // KB
+    int resBufSize = availMem * 1024 / 2 / resSize;   // Number of eigenpairs to keep in memory before saving to disk
+
+    // Result buffers
+    Vector<RealType, -1> resE(1);
+    Matrix<Scalar, -1, -1> resV(T.rows(), 1);
+    std::vector<int> found;
+    std::vector<RealType> sigmas;
+    int lastSave = 0;
+
+    for (int i = 0; i < intervals.size() - 1; ++i) {
+      resQ.pop(res);
+      std::shared_ptr<Matrix<Scalar, -1, -1>> pV = std::get<0>(res);
+      std::shared_ptr<Vector<RealType, -1>> pE = std::get<1>(res);
+      RealType sigma = std::get<2>(res);
+      RealType radius = std::get<3>(res);
+
+      sigmas.push_back(sigma);
 
       // Invert and shift back eigenvalues
-      E = E.cwiseInverse();
-      E.array() += sigma;
+      *pE = pE->cwiseInverse();
+      pE->array() += sigma;
 
       // Filter out results outside of desired interval
       std::vector<int> idx;
-      for (int j = 0; j < E.rows(); ++j) {
-        if (E(j) > sigma - radius && E(j) < sigma + radius) {
+      for (int j = 0; j < pE->rows(); ++j) {
+        if ((*pE)(j) > sigma - radius && (*pE)(j) < sigma + radius) {
           idx.push_back(j);
         }
       }
 
       // Retry with more ncv.
-      if (idx.size() == 0) {
-        eigsh.solve(k, GPU::LM, k * 3, 0, tol * std::numeric_limits<RealType>::epsilon());
-        E = eigsh.eigenvalues();
-        V = eigsh.eigenvectors();
-        for (int j = 0; j < E.rows(); ++j) {
-          if (E(j) > sigma - radius && E(j) < sigma + radius) {
-            idx.push_back(j);
-          }
-        }
-      }
+      // if (idx.size() == 0) {
+      //   eigsh.solve(k, GPU::LM, k * 3, 0, tol * std::numeric_limits<RealType>::epsilon());
+      //   E = eigsh.eigenvalues();
+      //   V = eigsh.eigenvectors();
+      //   for (int j = 0; j < E.rows(); ++j) {
+      //     if (E(j) > sigma - radius && E(j) < sigma + radius) {
+      //       idx.push_back(j);
+      //     }
+      //   }
+      // }
       found.push_back(idx.size());
 
       if (idx.size() > 0) {
         // Copy results to result buffer.
         resE.conservativeResize(resE.rows() + idx.size());
-        resE.bottomRows(idx.size()) = E(idx);
+        resE.bottomRows(idx.size()) = (*pE)(idx);
         resV.conservativeResize(Eigen::NoChange, resV.cols() + idx.size());
-        resV.rightCols(idx.size()) = V(Eigen::placeholders::all, idx);
+        resV.rightCols(idx.size()) = (*pV)(Eigen::placeholders::all, idx);
       }
 
       // Save buffered results to file
@@ -204,11 +239,11 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
         fnV += std::to_string(i);
         fnV += ".npy";
         std::string fnFound = "Found_";
-        fnV += std::to_string(i);
-        fnV += ".npy";
+        fnFound += std::to_string(i);
+        fnFound += ".npy";
         std::string fnSigma = "Sigma_";
-        fnV += std::to_string(i);
-        fnV += ".npy";
+        fnSigma += std::to_string(i);
+        fnSigma += ".npy";
         
         unsigned long shapeE[1] = {resE.rows() - 1};
         npy::SaveArrayAsNumpy(fnE, false, 1, shapeE, resE.data() + 1);
@@ -222,33 +257,50 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
         unsigned long shapeS[1] = {sigmas.size()};
         npy::SaveArrayAsNumpy(fnSigma, false, 1, shapeS, sigmas.data());
 
+        printCurrentTime();
+        printf(": Saved %d intervals to file.\n", i - lastSave + 1);
+        lastSave = i;
+
         resE.resize(1);
         resV.resize(T.rows(), 1);
         found.clear();
         sigmas.clear();
       }
-
-      printCurrentTime();
-      printf(": Finished solving at sigma = %f. Obtained %d eigval.\n", sigma, idx.size());
     }
   };
 
   // Lauch lu worker threads.
   std::vector<std::thread> luTs;
   printf("Lauch luTs\n");
-  for (int i = 0; i < nThreads - 1; ++i) {
+  for (int i = 0; i < nThreads; ++i) {
     luTs.emplace_back(workerLU);
   }
 
   // Lauch eigen worker thread
-  printf("Lauch eigT\n");
-  std::thread eigT(workerEig);
-
-  // Wait for workers to finish.
-  eigT.join();
-
-  for (int i = 0; i < nThreads - 1; ++i) {
-    luTs[i].join();
+  std::vector<std::thread> eigTs;
+  printf("Lauch eigTs\n");
+  for (int i = 0; i < nDevice; ++i) {
+    eigTs.emplace_back(workerEig, i);
   }
 
+  std::thread resT(workerRes);
+
+  // Wait for workers to finish.
+  for (int i = 0; i < nThreads; ++i) {
+    luTs[i].join();
+  }
+  printCurrentTime();
+  printf(": All LU factorization finished.\n");
+
+  for (int i = 0; i < nDevice; ++i) {
+    eigTs[i].join();
+  }
+  printCurrentTime();
+  printf(": All solver finished.\n");
+
+  resT.join();
+  printCurrentTime();
+  printf(": All results saved to disk.\n");
+
+  return;
 }
