@@ -19,4 +19,4 @@ cp $RE_S $RESDIR/
 cp $IM_S $RESDIR/
 cp $ITV $RESDIR/
 cd $RESDIR
-../$EXEC $N $D_O $RE_S $IM_S $ITV $EIG $XTOL $NT > output.txt
+../$EXEC $N $D_O $RE_S $IM_S $ITV $EIG $XTOL $NT
