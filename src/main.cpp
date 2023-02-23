@@ -221,6 +221,7 @@ void Solve(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
       //   }
       // }
       found.push_back(idx.size());
+      printf("%d Eigenvalues found at sigma = %f. Range:(%e, %e) \n", idx.size(), sigma, (*pE)(idx).minCoeff(), (*pE)(idx).maxCoeff());
 
       if (idx.size() > 0) {
         // Copy results to result buffer.
