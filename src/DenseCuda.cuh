@@ -27,6 +27,8 @@ class cuVector {
   public:
     using CudaType = typename real_type<Scalar>::CudaType;
     using RealType = typename real_type<Scalar>::RealType;
+
+    cuVector() {}
     // Construct a vector on device using the pointer and size given
     cuVector(const void *values, int size, bool onDevice) {
       m_size = size;
@@ -171,9 +173,7 @@ class cuVector {
     void _copy(const cuVector<Scalar> &rhs) {
       // Skip reallocation if rhs has the same size
       if (size() != rhs.size()) {
-        _destroy();
-        m_size = rhs.m_size;
-        _allocate();
+        resize(rhs.size());
       }
       _setVector(rhs.m_dValues, cudaMemcpyDeviceToDevice);
     }

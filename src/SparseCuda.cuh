@@ -18,30 +18,30 @@ class cusparseLinearOperator {
 };
 
 template <typename Scalar>
-class cuparseCsrMatrix : public cusparseLinearOperator<Scalar> {
+class cusparseCsrMatrix : public cusparseLinearOperator<Scalar> {
   public:
     using CudaType = typename real_type<Scalar>::CudaType;
-    cuparseCsrMatrix() {}
+    cusparseCsrMatrix() {}
 
     // Construct cusparseCsrMatrix from a generic Eigen sparse matrix. The input must be compressed.
-    cuparseCsrMatrix(const Eigen::SparseMatrix<Scalar, Eigen::ColMajor> &matrix) {
+    cusparseCsrMatrix(const Eigen::SparseMatrix<Scalar, Eigen::ColMajor> &matrix) {
       setMatrix(matrix);
     }
 
     // Construct cusparseCsrMatrix from a generic Eigen sparse matrix. The input must be compressed.
-    cuparseCsrMatrix(const Eigen::SparseMatrix<Scalar, Eigen::RowMajor> &matrix) {
+    cusparseCsrMatrix(const Eigen::SparseMatrix<Scalar, Eigen::RowMajor> &matrix) {
       setMatrix(matrix);
     }
 
     /*
-     *cuparseCsrMatrix(cudaStream_t stream, const Eigen::SparseMatrix<Scalar> &matrix) {
+     *cusparseCsrMatrix(cudaStream_t stream, const Eigen::SparseMatrix<Scalar> &matrix) {
      *m_stream = stream;
      *setMatrix(matrix);
      *}
     */
 
     // Construct cusparseCsrMatrix directly from c arrays.
-    cuparseCsrMatrix(const void *data, const void *rowPtr, const void *colIdx, const int nnz, const int nrow, const int ncol) {
+    cusparseCsrMatrix(const void *data, const void *rowPtr, const void *colIdx, const int nnz, const int nrow, const int ncol) {
       m_nnz = nnz;
       m_rows = nrow;
       m_cols = ncol;
@@ -50,24 +50,24 @@ class cuparseCsrMatrix : public cusparseLinearOperator<Scalar> {
     }
 
     // Copy constructor
-    cuparseCsrMatrix(const cuparseCsrMatrix<Scalar> &rhs) {
+    cusparseCsrMatrix(const cusparseCsrMatrix<Scalar> &rhs) {
       _copy(rhs);
     }
 
     // Destructor
-    ~cuparseCsrMatrix() {
+    ~cusparseCsrMatrix() {
       _destroy();
     }
 
     // Copy assigment operator
-    cuparseCsrMatrix<Scalar>& operator=(const cuparseCsrMatrix<Scalar> &rhs) {
+    cusparseCsrMatrix<Scalar>& operator=(const cusparseCsrMatrix<Scalar> &rhs) {
       if (this != &rhs) {
         _copy(rhs);
       }
       return *this;
     }
 
-    cuparseCsrMatrix<Scalar>& operator=(const Eigen::SparseMatrix<Scalar, Eigen::RowMajor> &rhs) {
+    cusparseCsrMatrix<Scalar>& operator=(const Eigen::SparseMatrix<Scalar, Eigen::RowMajor> &rhs) {
       setMatrix(rhs);
       return *this;
     }
@@ -205,7 +205,7 @@ class cuparseCsrMatrix : public cusparseLinearOperator<Scalar> {
       m_cols = 0;
     }
 
-    void _copy(const cuparseCsrMatrix<Scalar> &rhs) {
+    void _copy(const cusparseCsrMatrix<Scalar> &rhs) {
       _destroy();
       m_stream = rhs.m_stream;
       m_nnz = rhs.m_nnz;
@@ -237,6 +237,7 @@ template <typename Scalar>
 class cusparseLU : public cusparseLinearOperator<Scalar> {
   public:
     using CudaType = typename real_type<Scalar>::CudaType;
+    cusparseLU() {}
 
     // Construct cusparseLU from solved Eigen SparseLU objects.
     cusparseLU(Eigen::SparseLU<Eigen::SparseMatrix<Scalar>> &lu)
@@ -374,7 +375,7 @@ class cusparseLU : public cusparseLinearOperator<Scalar> {
     int nnzU() const { return m_U.nnz(); }
 
   private:
-    cuparseCsrMatrix<Scalar> m_L, m_U;
+    cusparseCsrMatrix<Scalar> m_L, m_U;
     cuVector<int> m_perm_r, m_perm_cInv;
     const cusparseSolvePolicy_t policy = CUSPARSE_SOLVE_POLICY_USE_LEVEL;
     const cusparseOperation_t trans = CUSPARSE_OPERATION_NON_TRANSPOSE;
@@ -384,7 +385,6 @@ class cusparseLU : public cusparseLinearOperator<Scalar> {
     csrsm2Info_t m_infoU = NULL;
     const Scalar m_alpha = 1;
     // Eigen::SparseLU<Eigen::SparseMatrix<Scalar>, Eigen::COLAMDOrdering<int>> &m_lu;
-
     void *m_dataBuf = nullptr;
 
     void _destroy() {
@@ -411,6 +411,7 @@ class cusparseLU : public cusparseLinearOperator<Scalar> {
       m_U = rhs.m_U;
       m_perm_r = rhs.m_perm_r;
       m_perm_cInv = rhs.m_perm_cInv;
+      _setMatDescr();
     }
 
     void _setMatDescr() {
@@ -434,3 +435,44 @@ class cusparseLU : public cusparseLinearOperator<Scalar> {
 
 };
 } // namespace GPU
+
+/* Load a LU directory to a cusparseLU object. */
+template <typename Scalar, typename RealType>
+void loadLU(GPU::cusparseLU<Scalar> &luG, RealType sigma) {
+  namespace fs = std::filesystem;
+  std::string dirname = "lu-" + std::to_string(sigma);
+  if (!fs::exists(dirname)) {
+    fprintf(stderr, "Directory %s doesn't exist.\n", dirname.c_str());
+    exit(1);
+  }
+
+  std::string fnLdata = dirname + "/Ldata.npy";
+  std::string fnLrowptr = dirname + "/Lrptr.npy";
+  std::string fnLcolidx = dirname + "/Lcidx.npy";
+  std::string fnUdata = dirname + "/Udata.npy";
+  std::string fnUrowptr = dirname + "/Urptr.npy";
+  std::string fnUcolidx = dirname + "/Ucidx.npy";
+  std::string fnPermR = dirname + "/perm_r.npy";
+  std::string fnPermCI = dirname + "/perm_cI.npy";
+
+  std::vector<Scalar> Ldata, Udata;
+  std::vector<int> Lrptr, Urptr, Lcidx, Ucidx, perm_r, perm_cI;
+  std::vector<unsigned long> shape;
+  bool fortran_order;
+
+  npy::LoadArrayFromNumpy(fnLdata, shape, fortran_order, Ldata);
+  npy::LoadArrayFromNumpy(fnLrowptr, shape, fortran_order, Lrptr);
+  npy::LoadArrayFromNumpy(fnLcolidx, shape, fortran_order, Lcidx);
+
+  npy::LoadArrayFromNumpy(fnUdata, shape, fortran_order, Udata);
+  npy::LoadArrayFromNumpy(fnUrowptr, shape, fortran_order, Urptr);
+  npy::LoadArrayFromNumpy(fnUcolidx, shape, fortran_order, Ucidx);
+
+  npy::LoadArrayFromNumpy(fnPermR, shape, fortran_order, perm_r);
+  npy::LoadArrayFromNumpy(fnPermCI, shape, fortran_order, perm_cI);
+
+  luG = GPU::cusparseLU<Scalar>(Ldata.data(), Lcidx.data(), Lrptr.data(),
+                                Udata.data(), Ucidx.data(), Urptr.data(),
+                                perm_r.data(), perm_cI.data(),
+                                Ldata.size(), Udata.size(), Lrptr.size() - 1);
+}

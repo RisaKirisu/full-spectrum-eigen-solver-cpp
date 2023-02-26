@@ -1,4 +1,5 @@
 #include "InternalIncludeCuda.h"
+
 // #include "InternalInclude.h"
 
 #ifdef USE_DOUBLE
@@ -39,7 +40,7 @@ int main(int argc, char *argv[]) {
 
   // Get commandline arguments.
   if (argc != 9) {
-    printUsage();
+    printSolveUsage();
   }
   N = std::stoi(argv[1]);
   delta_o = std::stod(argv[2]);
@@ -77,6 +78,9 @@ int main(int argc, char *argv[]) {
   //   S.emplace_back(1, 0);
   // }
   GetHamiltonian(N, S, 0.06, H);
+  printCurrentTime();
+  printf(": Finished constructing hamiltonian of size %d * %d.\n", N, N);
+
 
   Solve(H, interval, k, xtol, nthreads, nDevice);
 

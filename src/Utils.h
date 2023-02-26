@@ -7,12 +7,14 @@
   exit(1);                                  \
 }
 
-void printUsage();
+void printSolveUsage();
+void printFactorizeUsage();
 void printCurrentTime();
 
 /* Return Total System Memory in MB*/
 size_t getTotalSystemMemory();
 
+/* Load <size> space sperated values in a plain text file to a vector*/
 template <typename T>
 void loadFromFile(std::string file, std::vector<T> &output, int size) {
   std::ifstream fs(file);
@@ -33,6 +35,7 @@ void loadFromFile(std::string file, std::vector<T> &output, int size) {
   printf("Finished reading %d elements from %s.\n", size, file.c_str());
 }
 
+/* Load all space sperated values in a plain text file to a vector*/
 template <typename T>
 void loadFromFile(std::string file, std::vector<T> &output) {
   std::ifstream fs(file);
@@ -51,6 +54,7 @@ void loadFromFile(std::string file, std::vector<T> &output) {
   printf("Finished reading %d elements from %s.\n", output.size(), file.c_str());
 }
 
+/* A simple thread safe queue*/
 template<typename T>
 class ThreadSafeQueue {
 public:
@@ -87,21 +91,6 @@ public:
     return m_queue.empty();
   }
 
-  // bool isFull(bool blocking=true) const {
-  //   std::unique_lock<std::mutex> lock(m_mutex);
-  //   // printf("isFull\n");
-  //   if (m_max_capacity == -1 || m_queue.size() < m_max_capacity) {
-  //     return false;
-  //   }
-  //   // printf("??? %d, %d\n", m_max_capacity, m_queue.size());
-  //   if (blocking) {
-  //     m_cv_cap.wait(lock, [&]() { return m_max_capacity == -1 || m_queue.size() < m_max_capacity; });
-  //   }
-  //   return m_queue.size() < m_max_capacity;
-  // }
-
-  // int size() const { return m_queue.size(); }
-
 private:
   std::queue<T> m_queue;
   mutable std::mutex m_mutex;
@@ -109,3 +98,46 @@ private:
   mutable std::condition_variable m_cv_emp;
   const int m_max_capacity;
 };
+
+// Requires c++17
+/* Save an Eigen::SparseLU to files. */
+template <typename Scalar, typename RealType>
+void saveLU(Eigen::SparseLU<Eigen::SparseMatrix<Scalar>> &lu, RealType sigma) {
+  namespace fs = std::filesystem;
+  std::string dirname = "lu-" + std::to_string(sigma);
+  if (!fs::create_directory(dirname)) {
+    fprintf(stderr, "Cannot create directory %s.\n", dirname.c_str());
+    exit(1);
+  }
+  std::string fnLdata = dirname + "/Ldata.npy";
+  std::string fnLrowptr = dirname + "/Lrptr.npy";
+  std::string fnLcolidx = dirname + "/Lcidx.npy";
+  std::string fnUdata = dirname + "/Udata.npy";
+  std::string fnUrowptr = dirname + "/Urptr.npy";
+  std::string fnUcolidx = dirname + "/Ucidx.npy";
+  std::string fnPermR = dirname + "/perm_r.npy";
+  std::string fnPermCI = dirname + "/perm_cI.npy";
+
+  Eigen::SparseMatrix<Scalar, Eigen::RowMajor> L, U;
+  lu.getCsrLU(L, U);
+
+  unsigned long shape[1] = {L.nonZeros()};
+  npy::SaveArrayAsNumpy(fnLdata, false, 1, shape, L.valuePtr());
+  npy::SaveArrayAsNumpy(fnLcolidx, false, 1, shape, L.innerIndexPtr());
+  shape[0] = L.rows() + 1;
+  npy::SaveArrayAsNumpy(fnLrowptr, false, 1, shape, L.outerIndexPtr());
+
+  shape[0] = {U.nonZeros()};
+  npy::SaveArrayAsNumpy(fnUdata, false, 1, shape, U.valuePtr());
+  npy::SaveArrayAsNumpy(fnUcolidx, false, 1, shape, U.innerIndexPtr());
+  shape[0] = U.rows() + 1;
+  npy::SaveArrayAsNumpy(fnUrowptr, false, 1, shape, U.outerIndexPtr());
+
+  Eigen::Vector<int, -1> perm = lu.rowsPermutation().indices();
+  shape[0] = {perm.rows()};
+  npy::SaveArrayAsNumpy(fnPermR, false, 1, shape, perm.data());
+
+  perm = lu.colsPermutation().inverse().eval().indices();
+  shape[0] = {perm.rows()};
+  npy::SaveArrayAsNumpy(fnPermCI, false, 1, shape, perm.data());
+}

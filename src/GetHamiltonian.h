@@ -118,9 +118,6 @@ int GetHamiltonian(const int N, const std::vector<std::complex<T>> &Sdiag, const
   cT zero(0);
   result.prune(zero);
   result.makeCompressed();
-
-  printCurrentTime();
-  printf(": Finished constructing hamiltonian of size %d * %d.\n", N, N);
-
+  
   return 0;
 }

@@ -1,7 +1,12 @@
 #include "InternalInclude.h"
 
-void printUsage() {
+void printSolveUsage() {
   printf("Usage: ./solve <N> <delta_o> <real part of S> <imaginary part of S> <intervals> <k> <tolarent>(times machine epsilon) <number of threads>\n");
+  exit(1);
+}
+
+void printFactorizeUsage() {
+  printf("Usage: ./factorize <N> <delta_o> <real part of S> <imaginary part of S> <intervals> <number of threads>\n");
   exit(1);
 }
 
