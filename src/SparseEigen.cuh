@@ -63,7 +63,7 @@ class Eigsh {
       int n = A.rows();
       ASSERT(A.rows() == A.cols(), "input must be square matrix (shape: %d, %d)", A.rows(), A.cols());
       ASSERT(k > 0, "k must be greater than 0 (actual: %d)", k);
-      ASSERT(k < n, "k must be smaller then n (actual: %d)", k);
+      ASSERT(k < n, "k must be smaller than n (actual: %d)", k);
 
       if (ncv <= 0) {
         ncv = min(max(2 * k, k + 32), n - 1);
