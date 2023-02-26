@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
   printf("Args: %d, %f, %s, %s, %s, %d\n", N, delta_o, fnS_r.c_str(), fnS_i.c_str(), fnInterval.c_str(), nthreads);
 
   // Collect system info
-  nthreads = (nthreads == -1) ? std::thread::hardware_concurrency() : nthreads;
+  nthreads = (nthreads == -1) ? std::thread::hardware_concurrency() - 1 : nthreads;
   nthreads = std::max((int) (nthreads / 2.5), 1);   // Eigen's Sparse LU decomposition routine also spawn threads
 
   // Read S and intervals from provided files.
@@ -75,6 +75,8 @@ void Factorize(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
   using Eigen::Vector;
   
   ThreadSafeQueue<std::pair<RealType, RealType>> intervalQ;
+  ThreadSafeQueue<std::shared_ptr<SparseLU<SparseMatrix<Scalar>>>> resQ;
+  ThreadSafeQueue<RealType> resSQ;
 
   for (int i = 1; i < intervals.size(); ++i) {
     // (shift, radius)
@@ -94,14 +96,29 @@ void Factorize(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
       Tshift.diagonal().array() -= sigma;
 
       // Invert the matrix (finding LU decomposition)
-      SparseLU<SparseMatrix<Scalar>> lu;
-      lu.isSymmetric(true);
-      lu.analyzePattern(Tshift);
-      lu.factorize(Tshift);
+      std::shared_ptr<SparseLU<SparseMatrix<Scalar>>> luP = std::make_shared<SparseLU<SparseMatrix<Scalar>>>();
+      luP->isSymmetric(true);
+      luP->analyzePattern(Tshift);
+      luP->factorize(Tshift);
 
-      saveLU(lu, sigma);
+      resQ.push(luP);
+      resSQ.push(sigma);
+      
       printCurrentTime();
       printf(": Finished LU at sigma = %f\n", sigma);
+    }
+  };
+
+  auto workerSave = [&] {
+    std::shared_ptr<SparseLU<SparseMatrix<Scalar>>> luP;
+    RealType sigma;
+
+    for (int i = 0; i < intervals.size() - 1; ++i) {
+      resQ.pop(luP);
+      resSQ.pop(sigma);
+      saveLU(*luP, sigma);
+      printCurrentTime();
+      printf(": Saved LU at sigma = %f to disk\n", sigma);
     }
   };
 
@@ -111,11 +128,14 @@ void Factorize(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
   for (int i = 0; i < nThreads; ++i) {
     luTs.emplace_back(workerLU);
   }
+  std::thread svT(workerSave);
 
   // Wait for workers to finish.
   for (int i = 0; i < nThreads; ++i) {
     luTs[i].join();
   }
+  svT.join();
+
   printCurrentTime();
   printf(": All LU factorization finished and saved to disk.\n");
 }

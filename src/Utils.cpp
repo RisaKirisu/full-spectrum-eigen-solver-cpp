@@ -1,7 +1,7 @@
 #include "InternalInclude.h"
 
 void printSolveUsage() {
-  printf("Usage: ./solve <N> <delta_o> <real part of S> <imaginary part of S> <intervals> <k> <tolarent>(times machine epsilon) <number of threads>\n");
+  printf("Usage: ./solve <N> <intervals> <k> <tolarent>(times machine epsilon)\n");
   exit(1);
 }
 
