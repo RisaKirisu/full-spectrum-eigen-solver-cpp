@@ -43,7 +43,8 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < nDevice; ++i) {
     cudaDeviceProp prop;
     CHECK_CUDA( cudaGetDeviceProperties(&prop, i) );
-    printf("  %d - Device name: %s\n", i, prop.name);
+    printf("  %d - Device name: %s  ", i, prop.name);
+    printf("  Avail mem: %d", (int) prop.totalGlobalMem / 1024 / 1024);
   }
 
   Solve(N, interval, k, xtol);
@@ -113,7 +114,6 @@ void Solve(int                   N,
     found.push_back(idx.size());
     sigmas.push_back(sigma);
 
-    
     printCurrentTime();
     if (idx.size() > 0) {
       // Copy results to result buffer.
