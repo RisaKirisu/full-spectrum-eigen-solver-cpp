@@ -36,6 +36,16 @@ int main(int argc, char *argv[]) {
   std::vector<RealType> interval;
   loadFromFile(fnInterval, interval);
 
+  // Get GPU info
+  int nDevice;
+  CHECK_CUDA( cudaGetDeviceCount(&nDevice) );
+  printf("Available GPU count: %d\n", nDevice);
+  for (int i = 0; i < nDevice; ++i) {
+    cudaDeviceProp prop;
+    CHECK_CUDA( cudaGetDeviceProperties(&prop, i) );
+    printf("  %d - Device name: %s\n", i, prop.name);
+  }
+
   Solve(N, interval, k, xtol);
 
   return 0;
