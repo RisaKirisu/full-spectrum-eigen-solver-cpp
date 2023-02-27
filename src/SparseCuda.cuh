@@ -470,6 +470,7 @@ void loadLU(GPU::cusparseLU<Scalar> &luG, RealType sigma) {
 
   npy::LoadArrayFromNumpy(fnPermR, shape, fortran_order, perm_r);
   npy::LoadArrayFromNumpy(fnPermCI, shape, fortran_order, perm_cI);
+  printf("Lnnz: %d. Unnz: %d, Row: %d, permsz: %d\n", Ldata.size(), Udata.size(), Lrptr.size() - 1, perm_r.size());
 
   luG = GPU::cusparseLU<Scalar>(Ldata.data(), Lcidx.data(), Lrptr.data(),
                                 Udata.data(), Ucidx.data(), Urptr.data(),
