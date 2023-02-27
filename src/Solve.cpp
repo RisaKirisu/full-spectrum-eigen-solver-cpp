@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     cudaDeviceProp prop;
     CHECK_CUDA( cudaGetDeviceProperties(&prop, i) );
     printf("  %d - Device name: %s  ", i, prop.name);
-    printf("  Avail mem: %d", (int) prop.totalGlobalMem / 1024 / 1024);
+    printf("  Avail mem: %lu\n", prop.totalGlobalMem / 1024 / 1024);
   }
 
   Solve(N, interval, k, xtol);
