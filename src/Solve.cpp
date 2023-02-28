@@ -81,8 +81,8 @@ void Solve(int                   N,
   Matrix<Scalar, -1, -1> resV(width, 1);
   std::vector<int> found;
   std::vector<RealType> sigmas;
-  int lastSave = 0;
-  int resBufSize = 10;
+  int lastSave = -1;
+  int resBufSize = 2000;
 
   for (int i = 0; i < intervalQ.size(); ++i) {
     std::pair<RealType, RealType> itv = intervalQ[i];
@@ -151,7 +151,7 @@ void Solve(int                   N,
       npy::SaveArrayAsNumpy(fnSigma, false, 1, shapeS, sigmas.data());
 
       printCurrentTime();
-      printf(": Saved %d intervals to file.\n", i - lastSave + 1);
+      printf(": Saved %d intervals to file.\n", i - lastSave);
       lastSave = i;
 
       resE.resize(1);
