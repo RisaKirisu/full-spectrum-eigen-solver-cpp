@@ -128,15 +128,11 @@ void Factorize(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
 
   // Lauch lu worker threads.
   std::thread svT(workerSave);
-  setThreadScheduling(svT, SCHED_RR, 40);
 
   std::vector<std::thread> luTs;
   printf("Lauch luTs\n");
   for (int i = 0; i < nThreads; ++i) {
     luTs.emplace_back(workerLU);
-  }
-  for (int i = 0; i < nThreads; ++i) {
-    setThreadScheduling(luTs[i], SCHED_RR, 20);
   }
 
   // Wait for workers to finish.
