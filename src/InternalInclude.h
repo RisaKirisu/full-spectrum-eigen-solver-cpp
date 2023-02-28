@@ -22,6 +22,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <thread>
+#include <pthread.h>
 #include <unistd.h>
 #include <utility>
 #include <tuple>

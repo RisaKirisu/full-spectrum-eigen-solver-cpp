@@ -14,6 +14,9 @@ void printCurrentTime();
 /* Return Total System Memory in MB*/
 size_t getTotalSystemMemory();
 
+// Set scheduling of a thread.
+void setThreadScheduling(std::thread &th, int policy, int priority);
+
 /* Load <size> space sperated values in a plain text file to a vector*/
 template <typename T>
 void loadFromFile(std::string file, std::vector<T> &output, int size) {

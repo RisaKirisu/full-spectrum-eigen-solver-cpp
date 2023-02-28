@@ -77,6 +77,7 @@ void Factorize(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
   ThreadSafeQueue<std::pair<RealType, RealType>> intervalQ;
   ThreadSafeQueue<std::shared_ptr<SparseLU<SparseMatrix<Scalar>>>> resQ;
   ThreadSafeQueue<RealType> resSQ;
+  ThreadSafeQueue<int> sem(nThreads + 3); 
 
   for (int i = 1; i < intervals.size(); ++i) {
     // (shift, radius)
@@ -89,6 +90,7 @@ void Factorize(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
   auto workerLU = [&]{
     std::pair<RealType, RealType> intvl;
     while (intervalQ.pop(intvl, false)) {
+      sem.push(1);
       RealType sigma = intvl.first;
 
       // Shift the matrix
@@ -112,6 +114,7 @@ void Factorize(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
   auto workerSave = [&] {
     std::shared_ptr<SparseLU<SparseMatrix<Scalar>>> luP;
     RealType sigma;
+    int tmp;
 
     for (int i = 0; i < intervals.size() - 1; ++i) {
       resQ.pop(luP);
@@ -119,16 +122,22 @@ void Factorize(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
       saveLU(*luP, sigma);
       printCurrentTime();
       printf(": Saved LU at sigma = %f to disk\n", sigma);
+      sem.pop(tmp, false);
     }
   };
 
   // Lauch lu worker threads.
+  std::thread svT(workerSave);
+  setThreadScheduling(svT, SCHED_RR, 40);
+
   std::vector<std::thread> luTs;
   printf("Lauch luTs\n");
   for (int i = 0; i < nThreads; ++i) {
     luTs.emplace_back(workerLU);
   }
-  std::thread svT(workerSave);
+  for (int i = 0; i < nThreads; ++i) {
+    setThreadScheduling(luTs[i], SCHED_RR, 20);
+  }
 
   // Wait for workers to finish.
   for (int i = 0; i < nThreads; ++i) {
