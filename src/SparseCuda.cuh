@@ -72,6 +72,17 @@ class cusparseCsrMatrix : public cusparseLinearOperator<Scalar> {
       return *this;
     }
 
+    void setMatrix(const void *data, const void *rowPtr, const void *colIdx, const int nnz, const int nrow, const int ncol) {
+      /* If a cusparse matrix already exist, destroy it and create a new one*/
+      _destroy();
+
+      m_nnz = nnz;
+      m_rows = nrow;
+      m_cols = ncol;
+
+      _setMatrix(rowPtr, colIdx, data, cudaMemcpyHostToDevice);
+    }
+
     // Construct a cusparse csr matrix on GPU from an Eigen sparse matrix
     void setMatrix(const Eigen::SparseMatrix<Scalar> &matrix) {
       /* If a cusparse matrix already exist, destroy it and create a new one*/
@@ -283,6 +294,22 @@ class cusparseLU : public cusparseLinearOperator<Scalar> {
       return *this;
     }
 
+    // Set the cusparse LU object "in place" so there's no memory overhead
+    void setInPlace(const void *Ldata, const void *LcolIdx, const void *LrowPtr,
+                    const void *Udata, const void *UcolIdx, const void *UrowPtr,
+                    const void *perm_r, const void *perm_cInv,
+                    const int nnzL, const int nnzU, const int rows)
+    {
+      // Destroy current internal objects if they exist
+      _destroy();
+      m_L.setMatrix(Ldata, LrowPtr, LcolIdx, nnzL, rows, rows);
+      m_U.setMatrix(Udata, UrowPtr, UcolIdx, nnzU, rows, rows);
+      m_perm_r = cuVector<int>(perm_r, rows, false);
+      m_perm_cInv = cuVector<int>(perm_cInv, rows, false);
+
+      _setMatDescr();
+    }
+
     // Let Pr * A * Pc.T = L * U. This solves a system of linear equation: A * out = alpha * rhs
     void solve(cusparseHandle_t handle, const cuVector<Scalar> &rhs, const Scalar alpha, cuVector<Scalar> &out) {
       if (cols() != rhs.size()) {
@@ -470,10 +497,9 @@ void loadLU(GPU::cusparseLU<Scalar> &luG, RealType sigma) {
 
   npy::LoadArrayFromNumpy(fnPermR, shape, fortran_order, perm_r);
   npy::LoadArrayFromNumpy(fnPermCI, shape, fortran_order, perm_cI);
-  printf("Lnnz: %d. Unnz: %d, Row: %d, permsz: %d\n", Ldata.size(), Udata.size(), Lrptr.size() - 1, perm_r.size());
 
-  luG = GPU::cusparseLU<Scalar>(Ldata.data(), Lcidx.data(), Lrptr.data(),
-                                Udata.data(), Ucidx.data(), Urptr.data(),
-                                perm_r.data(), perm_cI.data(),
-                                Ldata.size(), Udata.size(), Lrptr.size() - 1);
+  luG.setInPlace(Ldata.data(), Lcidx.data(), Lrptr.data(),
+                 Udata.data(), Ucidx.data(), Urptr.data(),
+                 perm_r.data(), perm_cI.data(),
+                 Ldata.size(), Udata.size(), Lrptr.size() - 1);
 }
