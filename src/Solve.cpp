@@ -64,8 +64,6 @@ void Solve(int                   N,
 
 
   // Defaut to use 1/2 of total available memory 
-  size_t availMem = getTotalSystemMemory() / 2;
-  printf("Avail ram: %lu MB\n", availMem);
   int width = N * N * 2;
   
   std::vector<std::pair<RealType, RealType>> intervalQ;
@@ -78,14 +76,13 @@ void Solve(int                   N,
   printCurrentTime();
   printf(": Start solving. Lauching GPU worker threads.\n");
 
-  size_t resSize = (width * sizeof(Scalar) + sizeof(RealType)) / 1024; // KB
-  int resBufSize = availMem * 1024 / resSize;   // Number of eigenpairs to keep in memory before saving to disk
   // Result buffers
   Vector<RealType, -1> resE(1);
   Matrix<Scalar, -1, -1> resV(width, 1);
   std::vector<int> found;
   std::vector<RealType> sigmas;
   int lastSave = 0;
+  int resBufSize = 10;
 
   for (int i = 0; i < intervalQ.size(); ++i) {
     std::pair<RealType, RealType> itv = intervalQ[i];
