@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
   printf("Args: %d, %f, %s, %s, %s, %d\n", N, delta_o, fnS_r.c_str(), fnS_i.c_str(), fnInterval.c_str(), nthreads);
 
   // Collect system info
-  nthreads = (nthreads == -1) ? std::thread::hardware_concurrency() - 1 : nthreads;
+  nthreads = (nthreads == -1) ? std::thread::hardware_concurrency() - 2 : nthreads;
   nthreads = std::max((int) (nthreads / 2.5), 1);   // Eigen's Sparse LU decomposition routine also spawn threads
 
   // Read S and intervals from provided files.
