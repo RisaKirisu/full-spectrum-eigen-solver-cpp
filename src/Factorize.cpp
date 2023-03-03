@@ -16,6 +16,12 @@ void Factorize(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
 int main(int argc, char *argv[]) {
   using Eigen::SparseMatrix;
   using std::string;
+
+#ifdef USE_DOUBLE
+  printf("Using double precision.\n");
+#else
+  printf("Using single precision.\n");
+#endif
   
   int N;
   string fnS_r;

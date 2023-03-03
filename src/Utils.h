@@ -51,7 +51,7 @@ void loadFromFile(std::string file, std::vector<T> &output) {
   }
   output.shrink_to_fit();
 
-  printf("Finished reading %d elements from %s.\n", output.size(), file.c_str());
+  printf("Finished reading %lu elements from %s.\n", output.size(), file.c_str());
 }
 
 /* A simple thread safe queue*/

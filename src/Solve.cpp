@@ -64,6 +64,12 @@ void Solve(int                   N,
   using Eigen::Matrix;
   using Eigen::Vector;
 
+#ifdef USE_DOUBLE
+  printf("Using double precision.\n");
+#else
+  printf("Using single precision.\n");
+#endif
+
   int width = N * N * 2;
   
   ThreadSafeQueue<std::pair<RealType, RealType>> intervalQ;
@@ -143,7 +149,7 @@ void Solve(int                   N,
 
       if (idx.size() > 0) {
         // Copy results to result buffer.
-        printf("%d  Eigenvalues found at sigma  = %f. Range:(%e, %e) \n", idx.size(), sigma, (*pE)(idx).minCoeff(), (*pE)(idx).maxCoeff());
+        printf("%lu  Eigenvalues found at sigma  = %f. Range:(%e, %e) \n", idx.size(), sigma, (*pE)(idx).minCoeff(), (*pE)(idx).maxCoeff());
         resE.conservativeResize(resE.rows() + idx.size());
         resE.bottomRows(idx.size()) = (*pE)(idx);
         resV.conservativeResize(Eigen::NoChange, resV.cols() + idx.size());
