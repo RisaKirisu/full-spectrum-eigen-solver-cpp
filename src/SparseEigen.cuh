@@ -1,3 +1,11 @@
+/*
+  This sparse hermitian matrix eigen solver is an implementation of
+  the method described in the following paper:
+  Thick-Restart Lanczos Method for Symmetric Eigenvalue Problems
+  by Kesheng Wu and Horst Simon
+  https://sdm.lbl.gov/~kewu/ps/trlan.html
+*/
+
 #pragma once
 
 namespace GPU {
