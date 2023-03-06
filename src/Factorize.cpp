@@ -128,7 +128,7 @@ void Factorize(Eigen::SparseMatrix<Scalar, Eigen::ColMajor>  &T,
     for (int i = 0; i < intervals.size() - 1; ++i) {
       resQ.pop(luP);
       resSQ.pop(sigma);
-      saveLU(*luP, sigma);
+      saveLU<Scalar, RealType>(*luP, sigma);
       printCurrentTime();
       printf(": Saved LU at sigma = %f to disk\n", sigma);
       sem.pop(tmp, false);

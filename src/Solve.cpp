@@ -100,7 +100,7 @@ void Solve(int                   N,
       RealType radius = itv.second;
       // Calculate eigenvalues
       GPU::cusparseLU<Scalar> lu;
-      loadLU(lu, sigma);
+      loadLU<Scalar, RealType>(lu, sigma);
       GPU::Eigsh<Scalar> eigsh(lu);
       eigsh.solve(k, GPU::LM, 0, 0, tol);
 
