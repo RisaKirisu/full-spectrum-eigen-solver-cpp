@@ -18,11 +18,18 @@ void Solve(int                   N,
 
 int main(int argc, char *argv[]) {
   using std::string;
+
+#ifdef USE_DOUBLE
+  printf("Using double precision.\n");
+#else
+  printf("Using single precision.\n");
+#endif
   
   int N;
   string fnInterval;
   int k;
   double xtol;
+
 
   // Get commandline arguments.
   if (argc != 5) {
@@ -56,7 +63,7 @@ int main(int argc, char *argv[]) {
 void Solve(int                   N,
            std::vector<RealType> &intervals,
            int                   k,
-           double                tol,
+           double                xtol,
            int                   nDevice)
 {
   using Eigen::SparseMatrix;
@@ -64,13 +71,9 @@ void Solve(int                   N,
   using Eigen::Matrix;
   using Eigen::Vector;
 
-#ifdef USE_DOUBLE
-  printf("Using double precision.\n");
-#else
-  printf("Using single precision.\n");
-#endif
-
   int width = N * N * 2;
+  double tol = xtol * std::numeric_limits<RealType>::epsilon();
+  printf("Using tol = %e\n", tol);
   
   ThreadSafeQueue<std::pair<RealType, RealType>> intervalQ;
   ThreadSafeQueue<std::tuple<std::shared_ptr<Matrix<Scalar, -1, -1>>, std::shared_ptr<Vector<RealType, -1>>, RealType, RealType>> resQ;
@@ -99,7 +102,7 @@ void Solve(int                   N,
       GPU::cusparseLU<Scalar> lu;
       loadLU(lu, sigma);
       GPU::Eigsh<Scalar> eigsh(lu);
-      eigsh.solve(k, GPU::LM, 0, 0, tol * std::numeric_limits<RealType>::epsilon());
+      eigsh.solve(k, GPU::LM, 0, 0, tol);
 
       printCurrentTime();
       printf(": Finished solving at sigma = %f.\n", sigma);
