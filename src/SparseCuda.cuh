@@ -488,24 +488,15 @@ void loadLU(GPU::cusparseLU<Scalar> &luG, RealType sigma) {
   bool fortran_order;
 
   npy::LoadArrayFromNumpy(fnLdata, shape, fortran_order, Ldata);
-  printf("%d ", __LINE__);
   npy::LoadArrayFromNumpy(fnLrowptr, shape, fortran_order, Lrptr);
-  printf("%d ", __LINE__);
   npy::LoadArrayFromNumpy(fnLcolidx, shape, fortran_order, Lcidx);
-  printf("%d \n", __LINE__);
-
 
   npy::LoadArrayFromNumpy(fnUdata, shape, fortran_order, Udata);
-  printf("%d ", __LINE__);
   npy::LoadArrayFromNumpy(fnUrowptr, shape, fortran_order, Urptr);
-  printf("%d ", __LINE__);
   npy::LoadArrayFromNumpy(fnUcolidx, shape, fortran_order, Ucidx);
-  printf("%d \n", __LINE__);
 
   npy::LoadArrayFromNumpy(fnPermR, shape, fortran_order, perm_r);
-  printf("%d ", __LINE__);
   npy::LoadArrayFromNumpy(fnPermCI, shape, fortran_order, perm_cI);
-  printf("%d \n", __LINE__);
 
   luG.setInPlace(Ldata.data(), Lcidx.data(), Lrptr.data(),
                  Udata.data(), Ucidx.data(), Urptr.data(),
