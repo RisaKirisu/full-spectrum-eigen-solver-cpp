@@ -47,6 +47,9 @@ int main(int argc, char *argv[]) {
   // Collect system info
   nthreads = (nthreads == -1) ? std::thread::hardware_concurrency() - 2 : nthreads;
   nthreads = std::max((int) (nthreads / 2.5), 1);   // Eigen's Sparse LU decomposition routine also spawn threads
+#ifdef USE_DOUBLE
+  nthreads /= 2;
+#endif
 
   // Read S and intervals from provided files.
   int Nsq = N * N;
