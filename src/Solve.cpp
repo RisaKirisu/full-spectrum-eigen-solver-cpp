@@ -24,6 +24,10 @@ int main(int argc, char *argv[]) {
 #else
   printf("Using single precision.\n");
 #endif
+
+  // Make output unbuffered
+  setbuf(stdout,NULL);
+  setbuf(stderr,NULL);
   
   int N;
   string fnInterval;
