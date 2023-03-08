@@ -45,8 +45,7 @@ void loadFromFile(std::string file, std::vector<T> &output) {
 
   output.clear();
   T cur;
-  while (!fs.eof()) {
-    fs >> cur;
+  while (fs >> cur) {
     output.push_back(cur);
   }
   output.shrink_to_fit();
