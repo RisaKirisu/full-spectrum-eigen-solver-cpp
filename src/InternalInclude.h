@@ -5,6 +5,7 @@
 #include <Eigen/SparseLU>
 #include <Eigen/Eigenvalues>
 #include <unsupported/Eigen/KroneckerProduct>
+#include <unsupported/Eigen/SparseExtra>
 #include <fstream>
 #include <complex>
 #include <iostream>

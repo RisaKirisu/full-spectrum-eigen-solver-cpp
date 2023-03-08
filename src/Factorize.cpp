@@ -33,7 +33,6 @@ int main(int argc, char *argv[]) {
   string fnInterval;
   int k;
   double delta_o;
-  double xtol;
   int nthreads;
 
   // Get commandline arguments.
