@@ -106,7 +106,7 @@ void Solve(int                   N,
       GPU::cusparseLU<Scalar> lu;
       loadLU<Scalar, RealType>(lu, sigma);
       GPU::Eigsh<Scalar> eigsh(lu);
-      eigsh.solve(k, GPU::LM, 0, 0, tol);
+      eigsh.solve(k, GPU::LM, 0, 8000, tol);
 
       printCurrentTime();
       printf(": Finished solving at sigma = %f.\n", sigma);
