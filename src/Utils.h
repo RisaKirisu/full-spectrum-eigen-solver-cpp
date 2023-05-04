@@ -53,6 +53,20 @@ void loadFromFile(std::string file, std::vector<T> &output) {
   printf("Finished reading %lu elements from %s.\n", output.size(), file.c_str());
 }
 
+/* Transpose in-place a square matrix of size w stored in a 1-d vector. */
+template <typename T>
+void transpose(std::vector<T> &in, size_t w) {
+  if (w * w != in.size()) {
+    ERROR("Transpose dimensions don't match: w = %lu, in.size() = %lu.\n", w, in.size());
+  }
+
+  for (size_t i = 0; i < w; ++i) {
+    for (size_t j = i + 1; j < w; ++j) {
+      std::swap(in[i * w + j], in[j * w + i]);
+    }
+  }
+}
+
 /* A simple thread safe queue*/
 template<typename T>
 class ThreadSafeQueue {

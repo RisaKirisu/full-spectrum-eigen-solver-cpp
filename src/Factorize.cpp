@@ -65,7 +65,8 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < Nsq; ++i) {
     S.emplace_back(S_r[i], S_i[i]);
   }
-
+  transpose(S, N);
+  
   // Construct H.
   SparseMatrix<Scalar, Eigen::ColMajor> H;
   GetHamiltonian(N, S, 0.06, H);
